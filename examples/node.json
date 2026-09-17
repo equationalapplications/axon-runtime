@@ -1,0 +1,14 @@
+{
+  "node_id": "node-01",
+  "home": "/var/axon",
+  "bearer_token_env": "AXON_NODE_TOKEN",
+  "max_concurrent_jobs": 2,
+  "repo_allowlist": ["git@github.com:your-org/your-repo.git"],
+  "ceilings": { "max_harness_steps": 40, "timeout_seconds": 1800, "max_spend_usd": 2 },
+  "node_daily_spend_usd": 20,
+  "endpoint": {
+    "base_url": "https://openrouter.ai/api/v1",
+    "model": "deepseek/deepseek-chat",
+    "api_key_env": "AXON_ENDPOINT_KEY"
+  }
+}
