@@ -15,7 +15,7 @@
     "worker",
     "coding-agent"
   ],
-  "private": true,
+  "files": ["dist", "README.md", "LICENSE"],
   "type": "module",
   "engines": {
     "node": ">=22"
@@ -26,7 +26,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepare": "npm run build"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
