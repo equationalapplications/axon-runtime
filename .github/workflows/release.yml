@@ -497,11 +497,14 @@ jobs:
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: 24.10.0
-          # npm OIDC trusted publishing: writes ~/.npmrc with the registry URL so
-          # `npm publish --provenance` can exchange the job's OIDC token
-          # (id-token: write above) for a short-lived publish authorization.
+          # npm OIDC trusted publishing: registry-url makes setup-node emit an
+          # npmrc ($RUNNER_TEMP/.npmrc, wired via NPM_CONFIG_USERCONFIG) pointing
+          # at npmjs. With `id-token: write` granted, npm >= 11.5 exchanges the
+          # job's OIDC token on any publish (provenance is added automatically
+          # under trusted publishing; --provenance below is belt-and-braces).
           # No NPM_TOKEN secret needed. Requires the trusted-publisher entry on
-          # npmjs.com: repo EquationalApplications/axon-runtime, workflow
+          # npmjs.com: repo equationalapplications/axon-runtime (lowercase —
+          # GitHub's canonical casing, per `gh api repos/... --jq .full_name`), workflow
           # release.yml, environment left empty.
           registry-url: https://registry.npmjs.org
 
