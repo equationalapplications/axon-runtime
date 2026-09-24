@@ -106,6 +106,22 @@ npx axon metrics  --node node-01
 Set `AXON_EXECUTOR=fake` on a worker to exercise the whole pipeline without
 calling a model.
 
+### Android (Termux)
+
+To run an Axon worker on a dedicated Android device via Termux:
+
+1. **Install toolchain:** `pkg update && pkg install nodejs-lts git openssh python clang make -y`
+   (`python`, `clang`, and `make` let `npm ci` compile `better-sqlite3`, which
+   has no prebuilt binary for Android).
+2. **Prevent process kills:** Run `termux-wake-lock`, disable battery
+   optimization for Termux, and bypass Android's Phantom Process Killer via ADB
+   (`adb shell device_config put activity_manager max_phantom_processes 2147483647`).
+3. **Use internal storage:** Keep git repos and worktrees inside the Termux home
+   (`~`) to avoid Android FUSE/scoped-storage symlink issues.
+4. **SSH tunneling:** Start `sshd` on Termux (default port **8022**) and forward
+   loopback from the controller:
+   `ssh -N -L 18787:127.0.0.1:8787 -p 8022 user@android-ip`
+
 ## Worker API
 
 | Method | Path | Purpose |
