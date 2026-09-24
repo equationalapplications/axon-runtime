@@ -25,7 +25,7 @@
     "node": ">=22"
   },
   "bin": {
-    "axon": "./dist/client/cli.js"
+    "axon": "dist/client/cli.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
