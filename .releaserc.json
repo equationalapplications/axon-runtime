@@ -1,0 +1,14 @@
+{
+  "branches": ["main"],
+  "repositoryUrl": "https://github.com/equationalapplications/axon-runtime",
+  "tagFormat": "v${version}",
+  "plugins": [
+    ["@semantic-release/commit-analyzer", { "preset": "conventionalcommits" }],
+    ["@semantic-release/release-notes-generator", { "preset": "conventionalcommits" }],
+    ["@semantic-release/changelog", { "changelogFile": "CHANGELOG.md", "preset": "conventionalcommits" }],
+    ["@semantic-release/npm", { "npmPublish": false }],
+    ["@semantic-release/exec", {
+      "prepareCmd": "node -e \"const fs=require('fs'); const p=JSON.parse(fs.readFileSync('package.json')); p.version='${nextRelease.version}'; fs.writeFileSync('package.json', JSON.stringify(p,null,2)+'\\n');\""
+    }]
+  ]
+}
