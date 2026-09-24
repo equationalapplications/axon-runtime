@@ -15,18 +15,23 @@
     "worker",
     "coding-agent"
   ],
-  "private": true,
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "type": "module",
   "engines": {
     "node": ">=22"
   },
   "bin": {
-    "axon": "./dist/client/cli.js"
+    "axon": "dist/client/cli.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepare": "npm run build"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
@@ -36,8 +41,14 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@semantic-release/changelog": "^7.0.0",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/npm": "^13.2.0",
+    "@semantic-release/release-notes-generator": "^14.1.1",
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^22.7.0",
+    "conventional-changelog-conventionalcommits": "^10.4.0",
+    "semantic-release": "^25.0.9",
     "typescript": "^5.6.0",
     "vitest": "^4.1.11"
   }
