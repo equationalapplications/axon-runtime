@@ -53,6 +53,6 @@
     "vitest": "^4.1.11"
   },
   "allowScripts": {
-    "better-sqlite3": false
+    "better-sqlite3": true
   }
 }

@@ -81,11 +81,14 @@ placement are in progress.
 
 Requires Node.js 22+ and git.
 
-`better-sqlite3` ships prebuilt binaries for macOS, Linux (glibc and musl) and
-Windows, so its `node-gyp` install script is denied in `package.json`
-(`allowScripts`) and nothing compiles. npm reads `allowScripts` only from the
-project you install into, so if you depend on `axon-runtime`, add the same entry
-to your own `package.json`: `npm install-scripts deny better-sqlite3`.
+`better-sqlite3`'s implicit `node-gyp` install step is approved in
+`package.json` (`allowScripts`), which npm 11.19+ consults before running
+dependency install scripts (older npm runs them regardless). The step is a
+no-op wherever `better-sqlite3` ships a prebuilt binary (macOS, Linux glibc and
+musl, Windows) and compiles SQLite where it does not (Android/Termux). npm reads
+`allowScripts` only from the project you install into, so if you depend on
+`axon-runtime`, add the entry to your own `package.json` before installing:
+`npm pkg set allowScripts.better-sqlite3=true --json`.
 
 ```bash
 npm ci
@@ -118,10 +121,7 @@ To run an Axon worker on a dedicated Android device via Termux:
 
 1. **Install toolchain:** `pkg update && pkg install nodejs-lts git openssh python clang make -y`
    (`python`, `clang`, and `make` let `npm ci` compile `better-sqlite3`, which
-   has no prebuilt binary for Android). The repo denies that compile in
-   `package.json`, which overrides `.npmrc` and CLI flags, so drop the deny
-   locally before `npm ci` (do not commit the change):
-   `npm pkg delete allowScripts`.
+   has no prebuilt binary for Android).
 2. **Prevent process kills:** Run `termux-wake-lock`, disable battery
    optimization for Termux, and bypass Android's Phantom Process Killer via ADB
    (`adb shell device_config put activity_manager max_phantom_processes 2147483647`).
