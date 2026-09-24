@@ -1,3 +1,9 @@
+[![npm version](https://img.shields.io/npm/v/axon-runtime)](https://www.npmjs.com/package/axon-runtime)
+[![CI](https://img.shields.io/github/actions/workflow/status/equationalapplications/axon-runtime/ci.yml?branch=main)](https://github.com/equationalapplications/axon-runtime/actions/workflows/ci.yml)
+[![npm downloads](https://img.shields.io/npm/dm/axon-runtime)](https://www.npmjs.com/package/axon-runtime)
+[![Node.js](https://img.shields.io/node/v/axon-runtime)](https://www.npmjs.com/package/axon-runtime)
+[![License](https://img.shields.io/github/license/equationalapplications/axon-runtime)](LICENSE)
+
 # Axon Runtime
 
 A distributed worker runtime for AI coding agents. A controller dispatches
