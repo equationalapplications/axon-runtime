@@ -497,6 +497,13 @@ jobs:
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: 24.10.0
+          # npm OIDC trusted publishing: writes ~/.npmrc with the registry URL so
+          # `npm publish --provenance` can exchange the job's OIDC token
+          # (id-token: write above) for a short-lived publish authorization.
+          # No NPM_TOKEN secret needed. Requires the trusted-publisher entry on
+          # npmjs.com: repo EquationalApplications/axon-runtime, workflow
+          # release.yml, environment left empty.
+          registry-url: https://registry.npmjs.org
 
       - run: npm ci
 
@@ -578,7 +585,10 @@ jobs:
           # Single-package repo: one npm publish, still guarded by the
           # already-published check inside publish_if_needed. The package
           # version is already set by semantic-release's prepare phase.
-          publish_if_needed "./package.json" npm publish --access public
+          # --provenance: OIDC trusted publishing (npm exchange) — first publish
+          # of a new package name must be done manually per npm's rules; CI
+          # owns all subsequent versions.
+          publish_if_needed "./package.json" npm publish --access public --provenance
 
           echo "RELEASE_VERSION=${RELEASE_VERSION}" >> "$GITHUB_ENV"
 
