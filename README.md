@@ -85,7 +85,10 @@ Requires Node.js 22+ and git.
 `package.json` (`allowScripts`), which npm 11.19+ consults before running
 dependency install scripts (older npm runs them regardless). The step is a
 no-op wherever `better-sqlite3` ships a prebuilt binary (macOS, Linux glibc and
-musl, Windows) and compiles SQLite where it does not (Android/Termux). npm reads
+musl, Windows) and compiles SQLite where it does not (Android/Termux). On
+Windows a clean install can still invoke `node-gyp rebuild` before the prebuilt
+check (better-sqlite3#1516), so Windows consumers need Python and the MSVC build
+tools until npm honors `gypfile: false` on clean installs (npm/cli#9837). npm reads
 `allowScripts` only from the project you install into, so if you depend on
 `axon-runtime`, add the entry to your own `package.json` before installing:
 `npm pkg set allowScripts.better-sqlite3=true --json`.
