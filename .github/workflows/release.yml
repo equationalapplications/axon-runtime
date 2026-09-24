@@ -61,7 +61,7 @@ jobs:
           # filter via shell interpolation.
           #
           # GitHub populates the merge-commit -> PR association
-          # asynchronously: on the 6.5.0 release (issue #140) the first
+          # asynchronously: upstream (expo-llm-wiki issue #140) the first
           # query ran ~2s after the merge push, missed the association, and
           # Phase 2 was skipped entirely - the workflow went green while
           # publishing nothing. Retry while NO merged-into-main PR is
@@ -69,7 +69,8 @@ jobs:
           # association table has caught up, so a non-release answer is
           # final. Direct (non-merge) pushes never gain associations, so
           # they skip the retry window instead of burning it.
-          IS_MERGE=$(gh api "repos/${REPO}/commits/${COMMIT_SHA}" --jq 'if (.parents | length) >= 2 then "true" else "false" end')
+          COMMIT_JSON=$(gh api "repos/${REPO}/commits/${COMMIT_SHA}")
+          IS_MERGE=$(echo "$COMMIT_JSON" | jq -r 'if (.parents | length) >= 2 then "true" else "false" end')
           MATCH=""
           QUERY_START=$(date +%s)
           while true; do
@@ -83,7 +84,18 @@ jobs:
               break
             fi
             if [ $(( $(date +%s) - QUERY_START )) -ge 60 ]; then
-              echo "::warning::No merged-PR association for ${COMMIT_SHA} after 60s; classifying as phase 1. If this was a release PR merge, re-run the workflow once the association exists (see issue #140)."
+              # Association still missing. GitHub's merge-commit subject
+              # names the head branch ("Merge pull request #N from
+              # owner/release/vX.Y.Z"), so recover the release branch from
+              # it rather than silently skipping publication. Only someone
+              # with push access to main can author such a commit, and
+              # Phase 2 still requires Phase 1's tag to exist.
+              MATCH=$(echo "$COMMIT_JSON" | jq -r '.commit.message | split("\n")[0] | capture("^Merge pull request #[0-9]+ from [^/]+/(?<b>release/v[^ ]+)$").b // ""')
+              if [ -n "$MATCH" ]; then
+                echo "::warning::No merged-PR association for ${COMMIT_SHA} after 60s; release branch ${MATCH} recovered from the merge commit message."
+              else
+                echo "::warning::No merged-PR association for ${COMMIT_SHA} after 60s and the merge commit message names no release branch; classifying as phase 1."
+              fi
               break
             fi
             echo "Commit ${COMMIT_SHA} is a merge commit with no PR association yet (GitHub association lag) - retrying in 5s."
@@ -192,7 +204,11 @@ jobs:
           # Use RELEASE_BOT_PAT to delete the remote tag — pushing via
           # GITHUB_TOKEN is suppressed by GitHub's anti-recursion guard
           # for GITHUB_TOKEN-triggered synchronize events, and a ref delete
-          # still counts as a synchronize event for that guard.
+          # still counts as a synchronize event for that guard. The empty
+          # extraheader clears the GITHUB_TOKEN header actions/checkout
+          # persisted; git sends that header pre-emptively, so without the
+          # reset the push would authenticate as GITHUB_TOKEN despite the
+          # PAT embedded in the URL.
           HEAD_VERSION=$(node -p "require('./package.json').version")
           for TAG_AT_HEAD in $(git tag --points-at HEAD); do
             # Only release-format tags (vN...) are candidates. --points-at
@@ -211,7 +227,7 @@ jobs:
             if [ "$TAG_VERSION" != "$HEAD_VERSION" ]; then
               echo "::warning::Tag $TAG_AT_HEAD points at HEAD but main's package.json is $HEAD_VERSION. Treating as a ghost tag and deleting (local + remote) so semantic-release can recompute."
               git tag -d "$TAG_AT_HEAD" || true
-              git push "https://x-access-token:${RELEASE_BOT_PAT}@github.com/${REPO}.git" ":refs/tags/${TAG_AT_HEAD}" 2>&1 \
+              git -c "http.https://github.com/.extraheader=" push "https://x-access-token:${RELEASE_BOT_PAT}@github.com/${REPO}.git" ":refs/tags/${TAG_AT_HEAD}" 2>&1 \
                 || echo "::warning::Could not delete remote tag $TAG_AT_HEAD — clean it up manually before re-running."
             fi
           done
@@ -228,7 +244,9 @@ jobs:
           #     detection safety checks, which could otherwise cause it to
           #     refuse to run at all in this workflow context.
           #  2. It documents intent: this invocation only computes the next
-          #     version and mutates CHANGELOG.md + package.json files on disk.
+          #     version and mutates CHANGELOG.md, package.json and
+          #     package-lock.json on disk (@semantic-release/npm's prepare step
+          #     runs `npm version --no-git-tag-version`; npmPublish is false).
           npx semantic-release --no-ci
 
       - name: Check for releasable changes
@@ -239,7 +257,7 @@ jobs:
           # earlier in the job, so any build output, lockfile touch, or
           # generated file that is not ignored would otherwise make the
           # working tree dirty and falsely report has_changes=true.
-          RELEASE_PATHS="CHANGELOG.md package.json"
+          RELEASE_PATHS="CHANGELOG.md package.json package-lock.json"
           if [ -z "$(git status --porcelain -- $RELEASE_PATHS)" ]; then
             echo "No releasable commits found by semantic-release; nothing to do."
             echo "has_changes=false" >> "$GITHUB_OUTPUT"
@@ -265,17 +283,16 @@ jobs:
           # "approval-required" state for the `opened`, `synchronize`, and
           # `reopened` activity types - GitHub's anti-recursion guard
           # prevents the token that just created the PR from silently
-          # triggering itself every run. That left the required `test`
-          # status check permanently stuck at "Expected" on release PRs
-          # (e.g. #81) until a maintainer manually approved each run.
-          # RELEASE_BOT_PAT is a fine-grained PAT scoped to this repo
-          # (Contents: read/write, Pull requests: read/write) so the
-          # gh pr create/merge calls below are NOT subject to the
-          # approval-required gate and the Test workflow runs autonomously.
-          # Also exposed directly as RELEASE_BOT_PAT (rather than only as
-          # GH_TOKEN, which `gh` consumes) so the recovery push below can
-          # authenticate the git push with the same PAT — `git push` honors
-          # the remote URL's embedded credentials, not GH_TOKEN.
+          # triggering itself every run. Upstream (expo-llm-wiki #81) that
+          # left the required `test` status checks permanently stuck at
+          # "Expected" on release PRs until a maintainer manually approved
+          # each run. RELEASE_BOT_PAT is a fine-grained PAT scoped to this
+          # repo (Contents: read/write, Pull requests: read/write) so the
+          # branch push and gh pr create/merge calls below are NOT subject
+          # to the approval-required gate and the CI workflow runs
+          # autonomously. Also exposed directly as RELEASE_BOT_PAT (rather
+          # than only as GH_TOKEN, which `gh` consumes) so push_as_bot can
+          # authenticate `git push` with the same PAT.
           GH_TOKEN: ${{ secrets.RELEASE_BOT_PAT }}
           RELEASE_BOT_PAT: ${{ secrets.RELEASE_BOT_PAT }}
         run: |
@@ -294,8 +311,9 @@ jobs:
             # But it is ALSO the signature of a corrupted tag baseline: if
             # release tags are missing from origin or point at commits that are
             # not reachable from main, semantic-release walks back to an older
-            # tag and recomputes a version that shipped long ago. That is what
-            # silently swallowed the #131/#132/#133 releases on 2026-09-05.
+            # tag and recomputes a version that shipped long ago. Upstream
+            # (expo-llm-wiki #131/#132/#133) that silently swallowed three
+            # releases.
             #
             # Distinguish the two: benign means the merged release PR's commit
             # is at (or very near) HEAD. If main has moved on past it, the
@@ -335,134 +353,104 @@ jobs:
               echo "  - ${EXPECTED_STATE}"
               echo "  - semantic-release baseline (nearest reachable tag from HEAD): ${BASELINE_TAG:-<none found>}"
               echo "  - merged release PR commit: ${MERGED_SHA} (behind main HEAD $(git rev-parse HEAD))"
-              echo "::error::semantic-release recomputed ${RELEASE_VERSION}, but that version's release PR (${MERGED_PR}) merged at ${MERGED_SHA}, which is behind main. The release tag baseline is corrupted - ${EXPECTED_STATE}; semantic-release computed from a stale baseline. Nothing will publish until the tags are repaired (see the diagnostics above and PR #136's 'Not in this PR' section). Verify against origin: git ls-remote --tags origin"
+              echo "::error::semantic-release recomputed ${RELEASE_VERSION}, but that version's release PR (${MERGED_PR}) merged at ${MERGED_SHA}, which is behind main. The release tag baseline is corrupted - ${EXPECTED_STATE}; semantic-release computed from a stale baseline. Nothing will publish until the tags are repaired (see the diagnostics above): each release tag must point at a commit reachable from main. Verify against origin: git ls-remote --tags origin"
               exit 1
             fi
             echo "Phase 2 owns publication for this version; nothing to do here."
             exit 0
           fi
 
-          # Recovery: if the release branch's head commit still carries
-          # [skip ci] (a pre-fix artifact from the v5.2.1 era — see PR #82
-          # / #84), the Test workflow was never triggered for the PR —
-          # GitHub skips pull_request runs when the head commit contains
-          # [skip ci], and no manual rerun can recover a run that was
-          # never scheduled. Push a no-op follow-up commit so the next
-          # pull_request event fires the Test check. Post-fix, new PRs do
-          # not have [skip ci] in their head commit, so this is a no-op
-          # for them.
+          # Always (re)build the release branch from current main HEAD with
+          # this run's semantic-release output, even when a release PR for
+          # this version already exists. Reusing an existing branch as-is
+          # would ship a stale CHANGELOG: commits that landed on main after
+          # the branch was cut are folded into the release (the merge
+          # commit includes them) but missing from its notes. A fresh
+          # commit also guarantees the PR head never carries a [skip ci]
+          # that would stop the CI workflow from running. The release
+          # branch is ephemeral and only ever carries one chore commit, so
+          # force-pushing it is safe - no review history lives on it.
           #
-          # Runs for BOTH open and closed release PRs — the check is on
-          # the branch head, not on the PR state. A closed PR with [skip
-          # ci] in its head would otherwise be reopened below with the
-          # skipped head unchanged, leaving the reopened Test run skipped
-          # and auto-merge permanently blocked.
-          #
-          # The commit runs BEFORE the post-PR-creation identity setup
-          # at the bottom of this step, so user.name/email must be
-          # configured here explicitly. The push authenticates with
-          # RELEASE_BOT_PAT via the URL-embedded credential rather than
-          # the GITHUB_TOKEN that actions/checkout persisted — pushing
-          # with GITHUB_TOKEN would cause the resulting synchronize
-          # event to start in the "approval-required" state, which is
-          # exactly the suppression we're trying to avoid.
-          if [ -n "${OPEN_PR}${CLOSED_PR}" ] \
-             && git fetch origin "$BRANCH" 2>/dev/null \
-             && git log -1 --format=%s "origin/$BRANCH" 2>/dev/null | grep -q '\[skip ci\]'; then
-            echo "PR head commit contains [skip ci] - pushing fix-up commit to trigger Test workflow."
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            # Discard the semantic-release artifacts left in the working tree
-            # by restoring the branch from origin. The plain `git checkout
-            # "$BRANCH"` above fails when the on-disk release files (CHANGELOG
-            # + versions) differ from the branch's state — semantic-release
-            # ran in a prior step and the working tree is dirty. The recovery
-            # commit on the existing-PR path is an empty no-op, so the
-            # discarded generated files are not needed on this branch.
-            git checkout -f -B "$BRANCH" "origin/$BRANCH"
-            git commit --allow-empty --no-verify -m "chore(release): trigger Test workflow"
-            git push "https://x-access-token:${RELEASE_BOT_PAT}@github.com/${REPO}.git" "$BRANCH"
-          fi
+          # push_as_bot authenticates with RELEASE_BOT_PAT so the resulting
+          # pull_request `synchronize` event runs CI. The empty extraheader
+          # clears the GITHUB_TOKEN header actions/checkout persisted; git
+          # sends that header pre-emptively, so without the reset the push
+          # would authenticate as GITHUB_TOKEN despite the PAT in the URL.
+          push_as_bot() {
+            git -c "http.https://github.com/.extraheader=" push "https://x-access-token:${RELEASE_BOT_PAT}@github.com/${REPO}.git" "$@"
+          }
 
-          if [ -n "$OPEN_PR" ]; then
-            echo "Release PR already open for ${BRANCH}: ${OPEN_PR}"
-            echo "Idempotent rerun - nothing to commit/push, just ensure auto-merge is requested."
-            # --merge (not --squash): a merge commit makes the tagged
-            # release-branch commit an ancestor of main directly, so the
-            # Phase 2 tag relocation is a safety net instead of the only
-            # thing keeping release tags reachable (issue #137).
-            gh pr merge --auto --merge "$OPEN_PR" \
-              || echo "::warning::Could not enable auto-merge on ${OPEN_PR}; merge it manually."
-            exit 0
-          fi
-
-          if [ -n "$CLOSED_PR" ]; then
-            echo "Reopening previously closed release PR: ${CLOSED_PR}"
-            gh pr reopen "$CLOSED_PR"
-            gh pr merge --auto --merge "$CLOSED_PR" \
-              || echo "::warning::Could not enable auto-merge on ${CLOSED_PR}; merge it manually."
-            exit 0
-          fi
-
-          # No PR exists yet: create the release branch from current main HEAD,
-          # commit the semantic-release mutations, tag it, and push branch+tag
-          # together so a subsequent Phase 2 run can find the tag. Merging the
-          # PR with a merge commit (below) makes the tagged commit an ancestor
-          # of main directly; Phase 2's relocation then just normalizes the
-          # tag onto the main-line merge commit.
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git checkout -b "$BRANCH"
-          git add CHANGELOG.md package.json
+          git checkout -B "$BRANCH"
+          git add CHANGELOG.md package.json package-lock.json
           # [skip ci] is intentionally NOT used. The release branch is
           # release/v*, which matches neither the Release workflow's push
-          # trigger (branches: [main]) nor the Test workflow's push trigger
-          # (branches: [main]), so the branch push itself triggers no
+          # trigger (branches: [main]) nor the CI workflow's push trigger
+          # (branches: [main]), so the branch push itself triggers no push
           # workflow. Adding [skip ci] would propagate to the PR's HEAD
-          # commit and prevent the pull_request-triggered Test workflow
-          # from running - the very check we need to gate the merge.
+          # commit and prevent the pull_request-triggered CI workflow from
+          # running - the very check we need to gate the merge.
           git commit -m "chore(release): ${RELEASE_VERSION}"
-          # Annotated tag so `git push` actually transmits the ref. A
-          # lightweight tag is a ref without an object, and `git push --follow-tags`
-          # only follows annotated tags — pushing it would silently leave the
-          # tag local and Phase 2's `git fetch --tags` would not find it.
+          # Annotated tag so `git push` actually transmits the ref and Phase
+          # 2's `git fetch --tags` finds it.
           #
-          # semantic-release's verifyRelease step creates a local lightweight tag
-          # at HEAD before its plugins run; @semantic-release/git is removed from
-          # .releaserc.json so the tag stays local. Without the `tag -d` below,
-          # `git tag -a` fails with `fatal: tag 'vX.Y.Z' already exists` because
-          # the lightweight tag exists at HEAD (which is the chore commit after
-          # `git commit` above, but on a re-run of a stuck workflow HEAD was on
-          # main and the tag pointed at the spec merge — that's what broke the
-          # 2026-08-08 Phase 1 run for v5.2.1, see PR #80 spec §C1 step 6).
-          #
-          # --force on the push so an orphan tag (or a stale release branch) from
-          # a prior failed run cannot block this push either. The release branch
-          # is ephemeral and only ever carries one chore commit at a time, so a
-          # force-push is safe — no review history lives on it.
+          # semantic-release's verifyRelease step creates a local lightweight
+          # tag at HEAD before its plugins run (no git plugin, so it stays
+          # local). Without the `tag -d` below, `git tag -a` fails with
+          # `fatal: tag 'vX.Y.Z' already exists`.
           git tag -d "v${RELEASE_VERSION}" 2>/dev/null || true
           git tag -a "v${RELEASE_VERSION}" -m "v${RELEASE_VERSION}"
-          # --atomic: branch and tag succeed or fail together. Phase 2 depends on
-          # the tag being present after Phase 1; without atomicity a partial push
-          # (branch up, tag rejected) would silently leave Phase 1 looking green
+          # --atomic: branch and tag succeed or fail together. Phase 2 depends
+          # on the tag being present after Phase 1; without atomicity a
+          # partial push (branch up, tag rejected) would leave Phase 1 green
           # while Phase 2 has nothing to relocate.
-          # --force: the orphan-tag scenario we hit on 2026-08-08 (a prior
-          # failed Phase 1 push left a remote tag at a different commit —
-          # verifyRelease's own tag is local only, per the comment above) means
-          # the push can otherwise reject. The release branch is ephemeral, so
-          # force-pushing it is safe. See PR #80 spec §C1 step 6 for context.
-          git push --atomic origin "$BRANCH" "refs/tags/v${RELEASE_VERSION}" --force
+          # --force: replaces the previous build of this release branch, and
+          # any orphan tag a prior failed run left at a different commit.
+          push_as_bot --atomic --force "refs/heads/${BRANCH}" "refs/tags/v${RELEASE_VERSION}"
 
-          PR_URL=$(gh pr create --base main --head "$BRANCH" \
-            --title "chore(release): ${RELEASE_VERSION}" \
-            --body "Automated release PR. Merging this via a merge commit will trigger Phase 2 (publish + GitHub Release).")
+          if [ -n "$OPEN_PR" ]; then
+            echo "Refreshed existing release PR: ${OPEN_PR}"
+            PR_URL="$OPEN_PR"
+          elif [ -n "$CLOSED_PR" ] && gh pr reopen "$CLOSED_PR"; then
+            echo "Reopened previously closed release PR: ${CLOSED_PR}"
+            PR_URL="$CLOSED_PR"
+          else
+            PR_URL=$(gh pr create --base main --head "$BRANCH" \
+              --title "chore(release): ${RELEASE_VERSION}" \
+              --body "Automated release PR. Merging this via a merge commit will trigger Phase 2 (publish + GitHub Release).")
+          fi
 
-          gh pr merge --auto --merge "$PR_URL"
+          # --merge (not --squash): a merge commit makes the tagged
+          # release-branch commit an ancestor of main directly, so the
+          # Phase 2 tag relocation is a safety net instead of the only
+          # thing keeping release tags reachable (expo-llm-wiki #137).
+          gh pr merge --auto --merge "$PR_URL" \
+            || echo "::warning::Could not enable auto-merge on ${PR_URL}; merge it manually."
+
+          # A release PR for a different version that is still open was
+          # computed from an older main and is now superseded (e.g. a
+          # pending 1.0.1 fix release after a feat landed and 1.1.0 was
+          # computed). Left open it would conflict with this PR on
+          # package.json, or - if merged first - publish a version whose
+          # changes are a strict subset of this one. Close it and remove its
+          # branch and never-merged tag.
+          gh pr list --base main --state open --json headRefName,url \
+            --jq '.[] | select(.headRefName | startswith("release/v")) | "\(.headRefName) \(.url)"' \
+            | while read -r OTHER_BRANCH OTHER_URL; do
+                [ "$OTHER_BRANCH" = "$BRANCH" ] && continue
+                echo "Closing superseded release PR ${OTHER_URL} (${OTHER_BRANCH})"
+                gh pr close "$OTHER_URL" --delete-branch \
+                  --comment "Superseded by ${PR_URL}." \
+                  || echo "::warning::Could not close superseded release PR ${OTHER_URL}."
+                push_as_bot ":refs/tags/v${OTHER_BRANCH#release/v}" 2>&1 \
+                  || echo "::warning::Could not delete tag v${OTHER_BRANCH#release/v}; clean it up manually."
+              done
 
   # Phase 2: the release PR's merge commit has landed on main (or this
   # is a manual workflow_dispatch republish). Normalize the release tag onto
-  # the main-line commit, publish all packages, and create the GitHub Release.
+  # the main-line commit, publish the package, and create the GitHub Release.
   phase2:
     name: Phase 2 - Publish release
     needs: detect
@@ -470,8 +458,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      issues: write
-      pull-requests: write
       id-token: write
     concurrency:
       group: release-${{ github.ref }}-2
@@ -587,7 +573,7 @@ jobs:
 
           # Single-package repo: one npm publish, still guarded by the
           # already-published check inside publish_if_needed. The package
-          # version is already set by semantic-release's prepare phase.
+          # version was committed by Phase 1's release commit.
           # --provenance: OIDC trusted publishing (npm exchange) — first publish
           # of a new package name must be done manually per npm's rules; CI
           # owns all subsequent versions.
