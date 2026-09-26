@@ -1,6 +1,6 @@
 import { execa } from 'execa';
 import { childEnv } from './child-env.js';
-import type { DeployConfig } from '../config/deploy.js';
+import { DEFAULT_MAX_RETRIES, DEFAULT_REQUEST_TIMEOUT_MS, type DeployConfig } from '../config/deploy.js';
 import type { ExitReason, JobRequest } from '../contract/schema.js';
 import type { Workspace } from '../executor/types.js';
 
@@ -51,8 +51,6 @@ interface ChatCompletionBody {
 /** "All 5xx" per spec, plus the explicit transient 4xx trio. */
 export const isRetryableStatus = (status: number): boolean =>
   (status >= 500 && status <= 599) || status === 408 || status === 429 || status === 499;
-export const DEFAULT_REQUEST_TIMEOUT_MS = 600_000;
-export const DEFAULT_MAX_RETRIES = 3;
 const BASE_BACKOFF_MS = 2_000;
 const MAX_RETRY_AFTER_MS = 60_000;
 
@@ -154,11 +152,12 @@ export class HarnessAdapter {
           const status = response.status;
           // "All 5xx" per spec — range check, not a hand-listed set (Cloudflare
           // 520-527 and 529 are exactly the transient gateways worth surviving).
+          // Body cleanup on abandoned responses is owned by the fetch signal
+          // (undici tears the stream down on abort/timeout); json()-consumed or
+          // locked bodies cannot be cancelled manually.
           if (isRetryableStatus(status)) {
-            if (!this.maybeRetry('http_error', String(status), attempts, started)) return outcome('endpoint_error');
-            // Release the socket of the response we're abandoning (undici holds
-            // it until GC otherwise).
-            await response.body?.cancel().catch(() => {});
+            const retrying = this.maybeRetry('http_error', String(status), attempts, started);
+            if (!retrying) return outcome('endpoint_error');
             await this.backoffSleep(attempts, signal, response.headers.get('retry-after'));
             if (signal.aborted) return outcome('cancelled');
             attempts += 1;
@@ -167,6 +166,7 @@ export class HarnessAdapter {
           // Non-retryable 4xx (401/403/400/404/422…): fail fast, reusing the
           // shared log format so attempts parse uniformly in the worker log.
           this.logFailedAttempt('http_error', String(status), attempts, started);
+          await response.body?.cancel().catch(() => {});
           return outcome('endpoint_error');
         }
 
@@ -188,15 +188,11 @@ export class HarnessAdapter {
           parsed = await Promise.race([response.json(), abortPromise]);
         } catch (err) {
           // Order is load-bearing: a cancel/timeout landing mid-body-read must
-          // classify as cancelled FIRST, never as parse_error.
-          if (signal.aborted) {
-            await response.body?.cancel().catch(() => {});
-            return outcome('cancelled');
-          }
+          // classify as cancelled FIRST, never as parse_error. (Body cleanup on
+          // the cancelled return is owned by the fetch signal.)
+          if (signal.aborted) return outcome('cancelled');
           const failureClass = (err as Error)?.name === 'TimeoutError' ? 'timeout_request' : 'parse_error';
           if (!this.maybeRetry(failureClass, '200', attempts, started)) return outcome('endpoint_error');
-          // Release the abandoned body's socket.
-          await response.body?.cancel().catch(() => {});
           await this.backoffSleep(attempts, signal, undefined);
           if (signal.aborted) return outcome('cancelled');
           attempts += 1;
@@ -210,7 +206,6 @@ export class HarnessAdapter {
         const candidate = parsed as ChatCompletionBody | null;
         if (!candidate?.choices?.[0]?.message) {
           if (!this.maybeRetry('shape_error', '200', attempts, started)) return outcome('endpoint_error');
-          await response.body?.cancel().catch(() => {});
           await this.backoffSleep(attempts, signal, undefined);
           if (signal.aborted) return outcome('cancelled');
           attempts += 1;

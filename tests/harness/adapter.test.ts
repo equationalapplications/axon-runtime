@@ -295,6 +295,10 @@ describe('HarnessAdapter retry + per-request timeout (spec #8)', () => {
   });
 
   it('exhausts retries on a persistent 500 → endpoint_error with exactly maxRetries + 1 fetch calls', async () => {
+    // Deliberate behavior change (spec item 10): this assertion was previously
+    // a single fetch attempt; the retry ladder now makes 4 attempts before the
+    // job ends as endpoint_error. (Single canonical persistent-500 test — the
+    // duplicate was removed in review cycle 3, MINOR 6.)
     vi.useFakeTimers();
     const fetchImpl = stubResponses([{ status: 500 }]);
     const adapter = new HarnessAdapter({ endpoint, fetchImpl });
@@ -399,12 +403,15 @@ describe('HarnessAdapter retry + per-request timeout (spec #8)', () => {
   it('job-signal abort during a hung REQUEST → cancelled with ZERO additional fetch attempts', async () => {
     // Real timers on purpose: AbortSignal.any is not driven by fake timers, so
     // this exercises the actual combined-signal interplay in the adapter.
+    // The stub rejects with `init.signal.reason` (how real fetch reports an
+    // abort) so the test pins the "check signal.aborted FIRST" invariant even
+    // if the rejection looks like a plausible retryable error.
     const ac = new AbortController();
     let hung = false;
     const fetchImpl = vi.fn(async (_url: unknown, init: RequestInit) => {
       hung = true;
       await new Promise((_resolve, reject) => {
-        init.signal!.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+        init.signal!.addEventListener('abort', () => reject(init.signal!.reason), { once: true });
       });
       return new Response(JSON.stringify(assistantDone('never')), { status: 200 });
     });
@@ -477,10 +484,12 @@ describe('HarnessAdapter retry + per-request timeout (spec #8)', () => {
   it('retries a 200 with a choice missing `message` (shape_error), then succeeds', async () => {
     // `null` body and `choices:[{}]` previously threw past all classification
     // (null.choices TypeError / undefined pushed into messages) — review
-    // cycle-2 MAJOR 1. Both must retry like any other bad 200.
+    // cycle-2 MAJOR 1. Both must retry like any other bad 200. The sequence
+    // covers both: shape-error body first, then literal `null`, then success.
     vi.useFakeTimers();
-    const bodies = [
+    const bodies: unknown[] = [
       { model: 'deepseek/deepseek-chat', choices: [{ finish_reason: 'stop' }], usage: { prompt_tokens: 1, completion_tokens: 1 } },
+      null,
       assistantDone('recovered'),
     ];
     let i = 0;
@@ -489,12 +498,12 @@ describe('HarnessAdapter retry + per-request timeout (spec #8)', () => {
     ) as unknown as typeof fetch;
     const adapter = new HarnessAdapter({ endpoint, fetchImpl });
     const run = adapter.run(ws(), job(), new AbortController().signal);
-    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(10_000);
     const outcome = await run;
     expect(outcome.exitReason).toBe('completed');
     expect(outcome.summary).toBe('recovered');
     expect(outcome.steps).toBe(1);
-    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(fetchImpl).toHaveBeenCalledTimes(3); // shape-error + null body + success
   });
 
   it('reports endpoint_error with 4 attempts (1 + 3 retries) when the endpoint returns a failure', async () => {

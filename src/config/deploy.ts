@@ -1,7 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { z } from 'zod';
 import { ConstraintsSchema, type Constraints } from '../contract/schema.js';
-import { DEFAULT_MAX_RETRIES, DEFAULT_REQUEST_TIMEOUT_MS } from '../harness/adapter.js';
+
+/** Single source of truth for retry defaults (the adapter imports these). */
+export const DEFAULT_REQUEST_TIMEOUT_MS = 600_000;
+export const DEFAULT_MAX_RETRIES = 3;
 
 const FileSchema = z
   .object({
