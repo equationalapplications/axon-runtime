@@ -7,6 +7,14 @@ import type { Workspace } from './types.js';
 export class WorkspaceManager {
   /** In-flight mirror syncs, so concurrent creates share one clone/fetch. */
   private readonly syncing = new Map<string, Promise<string>>();
+  /**
+   * Per-mirror create chains. `git config` inside a linked worktree writes to
+   * the SHARED mirror config (locked per repo, not per worktree), so two
+   * concurrent creates racing their config steps fail with "could not lock
+   * config file". Creates on one mirror are serialized; different mirrors
+   * proceed in parallel.
+   */
+  private readonly creating = new Map<string, Promise<unknown>>();
 
   constructor(private readonly home: string) {}
 
@@ -37,6 +45,18 @@ export class WorkspaceManager {
 
   async create(jobId: string, repo: string, ref: string): Promise<Workspace> {
     const mirror = await this.syncMirror(repo);
+    return this.withMirrorLock(mirror, () => this.doCreate(jobId, repo, ref, mirror));
+  }
+
+  /** Serialize creates per mirror (see `creating` — shared-config lock race). */
+  private withMirrorLock<T>(mirror: string, fn: () => Promise<T>): Promise<T> {
+    const prev = this.creating.get(mirror) ?? Promise.resolve();
+    const next = prev.then(fn, fn); // run regardless of the predecessor's outcome
+    this.creating.set(mirror, next.catch(() => undefined));
+    return next;
+  }
+
+  private async doCreate(jobId: string, repo: string, ref: string, mirror: string): Promise<Workspace> {
     const dir = join(this.home, 'workspaces', jobId);
     mkdirSync(join(this.home, 'workspaces'), { recursive: true });
     await execa('git', ['worktree', 'add', '--detach', dir, ref], { cwd: mirror });
