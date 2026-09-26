@@ -49,7 +49,7 @@ interface ChatCompletionBody {
 }
 
 /** "All 5xx" per spec, plus the explicit transient 4xx trio. */
-export const RETRYABLE_STATUSES = (status: number): boolean =>
+export const isRetryableStatus = (status: number): boolean =>
   (status >= 500 && status <= 599) || status === 408 || status === 429 || status === 499;
 export const DEFAULT_REQUEST_TIMEOUT_MS = 600_000;
 export const DEFAULT_MAX_RETRIES = 3;
@@ -154,7 +154,7 @@ export class HarnessAdapter {
           const status = response.status;
           // "All 5xx" per spec — range check, not a hand-listed set (Cloudflare
           // 520-527 and 529 are exactly the transient gateways worth surviving).
-          if (RETRYABLE_STATUSES(status)) {
+          if (isRetryableStatus(status)) {
             if (!this.maybeRetry('http_error', String(status), attempts, started)) return outcome('endpoint_error');
             // Release the socket of the response we're abandoning (undici holds
             // it until GC otherwise).
@@ -175,6 +175,9 @@ export class HarnessAdapter {
         // The json() read races the job signal so cancellation cuts a hung body
         // read promptly even when the fetch implementation doesn't propagate
         // the signal into the body stream.
+        // Late-abort gap: an abort between fetch resolving and the listener
+        // below attaching would never fire — check before racing.
+        if (signal.aborted) return outcome('cancelled');
         let parsed: unknown;
         let onAbort: () => void;
         const abortPromise = new Promise<never>((_, reject) => {
@@ -183,11 +186,15 @@ export class HarnessAdapter {
         });
         try {
           parsed = await Promise.race([response.json(), abortPromise]);
-        } catch {
+        } catch (err) {
           // Order is load-bearing: a cancel/timeout landing mid-body-read must
           // classify as cancelled FIRST, never as parse_error.
-          if (signal.aborted) return outcome('cancelled');
-          if (!this.maybeRetry('parse_error', '200', attempts, started)) return outcome('endpoint_error');
+          if (signal.aborted) {
+            await response.body?.cancel().catch(() => {});
+            return outcome('cancelled');
+          }
+          const failureClass = (err as Error)?.name === 'TimeoutError' ? 'timeout_request' : 'parse_error';
+          if (!this.maybeRetry(failureClass, '200', attempts, started)) return outcome('endpoint_error');
           // Release the abandoned body's socket.
           await response.body?.cancel().catch(() => {});
           await this.backoffSleep(attempts, signal, undefined);
@@ -197,7 +204,19 @@ export class HarnessAdapter {
         } finally {
           signal.removeEventListener('abort', onAbort!);
         }
-        body = parsed as ChatCompletionBody;
+        // Shape check BEFORE use: `null` is valid JSON and a choice without a
+        // `message` would push undefined into the conversation and throw later
+        // (review cycle-2 MAJOR 1). Both retry like any other bad 200.
+        const candidate = parsed as ChatCompletionBody | null;
+        if (!candidate?.choices?.[0]?.message) {
+          if (!this.maybeRetry('shape_error', '200', attempts, started)) return outcome('endpoint_error');
+          await response.body?.cancel().catch(() => {});
+          await this.backoffSleep(attempts, signal, undefined);
+          if (signal.aborted) return outcome('cancelled');
+          attempts += 1;
+          continue;
+        }
+        body = candidate;
         if (!body.choices?.[0]) {
           if (!this.maybeRetry('empty_choices', '200', attempts, started)) return outcome('endpoint_error');
           await this.backoffSleep(attempts, signal, undefined);

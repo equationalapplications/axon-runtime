@@ -474,6 +474,29 @@ describe('HarnessAdapter retry + per-request timeout (spec #8)', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1); // zero retries after cancellation
   });
 
+  it('retries a 200 with a choice missing `message` (shape_error), then succeeds', async () => {
+    // `null` body and `choices:[{}]` previously threw past all classification
+    // (null.choices TypeError / undefined pushed into messages) — review
+    // cycle-2 MAJOR 1. Both must retry like any other bad 200.
+    vi.useFakeTimers();
+    const bodies = [
+      { model: 'deepseek/deepseek-chat', choices: [{ finish_reason: 'stop' }], usage: { prompt_tokens: 1, completion_tokens: 1 } },
+      assistantDone('recovered'),
+    ];
+    let i = 0;
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify(bodies[Math.min(i++, bodies.length - 1)]), { status: 200 }),
+    ) as unknown as typeof fetch;
+    const adapter = new HarnessAdapter({ endpoint, fetchImpl });
+    const run = adapter.run(ws(), job(), new AbortController().signal);
+    await vi.advanceTimersByTimeAsync(5_000);
+    const outcome = await run;
+    expect(outcome.exitReason).toBe('completed');
+    expect(outcome.summary).toBe('recovered');
+    expect(outcome.steps).toBe(1);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
   it('reports endpoint_error with 4 attempts (1 + 3 retries) when the endpoint returns a failure', async () => {
     // Deliberate behavior change (spec item 10): this test previously asserted
     // a single fetch attempt; the retry ladder now makes 4 attempts before

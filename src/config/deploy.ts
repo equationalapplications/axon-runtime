@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { z } from 'zod';
 import { ConstraintsSchema, type Constraints } from '../contract/schema.js';
+import { DEFAULT_MAX_RETRIES, DEFAULT_REQUEST_TIMEOUT_MS } from '../harness/adapter.js';
 
 const FileSchema = z
   .object({
@@ -73,8 +74,8 @@ export function loadDeployConfig(path: string, env: NodeJS.ProcessEnv): DeployCo
       baseUrl: parsed.endpoint.base_url,
       model: parsed.endpoint.model,
       apiKey: requireEnv(env, parsed.endpoint.api_key_env),
-      requestTimeoutMs: parsed.endpoint.request_timeout_ms ?? 600_000,
-      maxRetries: parsed.endpoint.max_retries ?? 3,
+      requestTimeoutMs: parsed.endpoint.request_timeout_ms ?? DEFAULT_REQUEST_TIMEOUT_MS,
+      maxRetries: parsed.endpoint.max_retries ?? DEFAULT_MAX_RETRIES,
     },
   };
 }

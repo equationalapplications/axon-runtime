@@ -1,7 +1,9 @@
 # Spec: harness retry with per-request timeout (#8)
 
 Repo: axon-runtime. Date: 2026-09-26. Author: Tessera.
-Status: DRAFT — Kurt's spec approval gates implementation; PR opens now as the review surface.
+Status: APPROVED (Gemini review 2026-09-26; three gates decided — build
+locally per Tessera, guarded-parse fix in-PR). Implemented in PR #9;
+review-loop dispositions in `2026-09-26-pr9-review-dispositions.md`.
 Issue: equationalapplications/axon-runtime#8.
 Investigation basis: live failures 2026-09-26 (jobs 4e76307e, c71ca6e5,
 dee43e5b — all `endpoint_error`, ~6 min, 6–9 steps, empty output) + source
@@ -127,10 +129,13 @@ loop:
   **Non-retryable:** all other 4xx (401/403/400/404/422…) — fail fast with
   `endpoint_error` + status logged; retrying auth/config errors is waste.
 - **Step semantics:** `steps += 1` and `onStep` fire only on a step that
-  PRODUCES an assistant message (success or final failure). Retried
-  attempts inside a step do not increment `steps` and do not call `onStep`.
-- **Telemetry:** failed attempts log to the worker log via the existing
-  step-callback channel — `attempt 2/3 failed: status=502 elapsed_ms=4821`
+  PRODUCES an assistant message. Retried attempts inside a step do not
+  increment `steps` and do not call `onStep`. (Failed-job step counts:
+  a job that never produces an assistant message reports `steps` as the
+  count of steps that produced one — follow-up contract question in #10.)
+- **Telemetry:** failed attempts log to the worker log via `console.warn`
+  (the worker captures stdout/stderr into its log; no new logger plumbing
+  in this PR) — `attempt 2/4 failed: http_error status=502 elapsed_ms=4821`
   (class, status if any, elapsed ms). No new `ExitReason` values; a job
   that exhausts retries still ends as `endpoint_error` (with the last
   failure's diagnostics in the log).
