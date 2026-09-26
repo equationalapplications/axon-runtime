@@ -48,8 +48,11 @@ interface ChatCompletionBody {
   usage?: { prompt_tokens?: number; completion_tokens?: number };
 }
 
-/** 408 request timeout, 429 rate limit, 499 client-closed, all 5xx. Other 4xx fail fast. */
-const RETRYABLE_STATUS = new Set([408, 429, 499, 500, 501, 502, 503, 504, 505, 506, 507, 508, 510, 511]);
+/** "All 5xx" per spec, plus the explicit transient 4xx trio. */
+export const RETRYABLE_STATUSES = (status: number): boolean =>
+  (status >= 500 && status <= 599) || status === 408 || status === 429 || status === 499;
+export const DEFAULT_REQUEST_TIMEOUT_MS = 600_000;
+export const DEFAULT_MAX_RETRIES = 3;
 const BASE_BACKOFF_MS = 2_000;
 const MAX_RETRY_AFTER_MS = 60_000;
 
@@ -89,8 +92,8 @@ export class HarnessAdapter {
     this.endpoint = opts.endpoint;
     this.fetchImpl = opts.fetchImpl ?? fetch;
     this.onStep = opts.onStep;
-    this.requestTimeoutMs = opts.endpoint.requestTimeoutMs ?? 600_000;
-    this.maxRetries = opts.endpoint.maxRetries ?? 3;
+    this.requestTimeoutMs = opts.endpoint.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    this.maxRetries = opts.endpoint.maxRetries ?? DEFAULT_MAX_RETRIES;
   }
 
   async run(ws: Workspace, job: JobRequest, signal: AbortSignal): Promise<HarnessOutcome> {
@@ -151,7 +154,7 @@ export class HarnessAdapter {
           const status = response.status;
           // "All 5xx" per spec — range check, not a hand-listed set (Cloudflare
           // 520-527 and 529 are exactly the transient gateways worth surviving).
-          if ((status >= 500 && status <= 599) || status === 408 || status === 429 || status === 499) {
+          if (RETRYABLE_STATUSES(status)) {
             if (!this.maybeRetry('http_error', String(status), attempts, started)) return outcome('endpoint_error');
             // Release the socket of the response we're abandoning (undici holds
             // it until GC otherwise).
@@ -161,16 +164,25 @@ export class HarnessAdapter {
             attempts += 1;
             continue;
           }
-          // Non-retryable 4xx (401/403/400/404/422…): fail fast.
-          console.warn(`attempt ${attempts + 1}/${this.maxRetries + 1} failed: http_error status=${status} elapsed_ms=${Date.now() - started}`);
+          // Non-retryable 4xx (401/403/400/404/422…): fail fast, reusing the
+          // shared log format so attempts parse uniformly in the worker log.
+          this.logFailedAttempt('http_error', String(status), attempts, started);
           return outcome('endpoint_error');
         }
 
         // Guard response.json() + choices[0]: a 200 with a malformed/truncated
         // body previously threw past all classification. Now retryable like 5xx.
+        // The json() read races the job signal so cancellation cuts a hung body
+        // read promptly even when the fetch implementation doesn't propagate
+        // the signal into the body stream.
         let parsed: unknown;
+        let onAbort: () => void;
+        const abortPromise = new Promise<never>((_, reject) => {
+          onAbort = () => reject(new DOMException('The operation was aborted.', 'AbortError'));
+          signal.addEventListener('abort', onAbort, { once: true });
+        });
         try {
-          parsed = await response.json();
+          parsed = await Promise.race([response.json(), abortPromise]);
         } catch {
           // Order is load-bearing: a cancel/timeout landing mid-body-read must
           // classify as cancelled FIRST, never as parse_error.
@@ -182,6 +194,8 @@ export class HarnessAdapter {
           if (signal.aborted) return outcome('cancelled');
           attempts += 1;
           continue;
+        } finally {
+          signal.removeEventListener('abort', onAbort!);
         }
         body = parsed as ChatCompletionBody;
         if (!body.choices?.[0]) {
@@ -234,10 +248,15 @@ export class HarnessAdapter {
    * returns false (fail fast → endpoint_error) when the retry budget is spent.
    */
   private maybeRetry(failureClass: string, status: string, attempts: number, started: number): boolean {
+    this.logFailedAttempt(failureClass, status, attempts, started);
+    return attempts < this.maxRetries;
+  }
+
+  /** Single log format for failed attempts (worker-log channel). */
+  private logFailedAttempt(failureClass: string, status: string, attempts: number, started: number): void {
     console.warn(
       `attempt ${attempts + 1}/${this.maxRetries + 1} failed: ${failureClass} status=${status} elapsed_ms=${Date.now() - started}`,
     );
-    return attempts < this.maxRetries;
   }
 
   /**

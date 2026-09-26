@@ -456,6 +456,24 @@ describe('HarnessAdapter retry + per-request timeout (spec #8)', () => {
     expect(elapsed).toBeLessThan(2_000); // base backoff is 2s (jittered ±20%); the abort must cut it short
   });
 
+  it('job-signal abort during a hung response BODY READ → cancelled promptly (never classified parse_error)', async () => {
+    // Response whose body stream never closes: json() hangs until the job
+    // signal aborts. Cancels must classify as cancelled BEFORE the parse_error
+    // retry path (review MAJOR 1 / MINOR 6).
+    const ac = new AbortController();
+    const neverEndingBody = new ReadableStream<Uint8Array>({ start() {} }); // never enqueues, never closes
+    const fetchImpl = vi.fn(async () => new Response(neverEndingBody, { status: 200 })) as unknown as typeof fetch;
+    const adapter = new HarnessAdapter({ endpoint, fetchImpl });
+    const run = adapter.run(ws(), job(), ac.signal);
+    await vi.waitFor(() => expect(fetchImpl).toHaveBeenCalledTimes(1));
+    const t0 = Date.now();
+    ac.abort();
+    const outcome = await run;
+    expect(outcome.exitReason).toBe('cancelled');
+    expect(Date.now() - t0).toBeLessThan(2_000);
+    expect(fetchImpl).toHaveBeenCalledTimes(1); // zero retries after cancellation
+  });
+
   it('reports endpoint_error with 4 attempts (1 + 3 retries) when the endpoint returns a failure', async () => {
     // Deliberate behavior change (spec item 10): this test previously asserted
     // a single fetch attempt; the retry ladder now makes 4 attempts before
