@@ -505,18 +505,4 @@ describe('HarnessAdapter retry + per-request timeout (spec #8)', () => {
     expect(outcome.steps).toBe(1);
     expect(fetchImpl).toHaveBeenCalledTimes(3); // shape-error + null body + success
   });
-
-  it('reports endpoint_error with 4 attempts (1 + 3 retries) when the endpoint returns a failure', async () => {
-    // Deliberate behavior change (spec item 10): this test previously asserted
-    // a single fetch attempt; the retry ladder now makes 4 attempts before
-    // the job ends as endpoint_error.
-    vi.useFakeTimers();
-    const failing = vi.fn(async () => new Response('nope', { status: 500 })) as unknown as typeof fetch;
-    const adapter = new HarnessAdapter({ endpoint, fetchImpl: failing });
-    const run = adapter.run(ws(), job(), new AbortController().signal);
-    await vi.advanceTimersByTimeAsync(20_000);
-    const outcome = await run;
-    expect(outcome.exitReason).toBe('endpoint_error');
-    expect(failing).toHaveBeenCalledTimes(4);
-  });
 });

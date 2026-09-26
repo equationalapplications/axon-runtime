@@ -152,12 +152,18 @@ export class HarnessAdapter {
           const status = response.status;
           // "All 5xx" per spec — range check, not a hand-listed set (Cloudflare
           // 520-527 and 529 are exactly the transient gateways worth surviving).
-          // Body cleanup on abandoned responses is owned by the fetch signal
-          // (undici tears the stream down on abort/timeout); json()-consumed or
-          // locked bodies cannot be cancelled manually.
+          // Body cleanup note: json()-locked/consumed streams cannot be
+          // cancelled manually; unread bodies are cancelled explicitly on each
+          // abandon path below.
           if (isRetryableStatus(status)) {
             const retrying = this.maybeRetry('http_error', String(status), attempts, started);
-            if (!retrying) return outcome('endpoint_error');
+            if (!retrying) {
+              await response.body?.cancel().catch(() => {});
+              return outcome('endpoint_error');
+            }
+            // Unread error body: release the socket now (the fetch signal would
+            // otherwise hold it until the 10-min timeout or GC).
+            await response.body?.cancel().catch(() => {});
             await this.backoffSleep(attempts, signal, response.headers.get('retry-after'));
             if (signal.aborted) return outcome('cancelled');
             attempts += 1;
