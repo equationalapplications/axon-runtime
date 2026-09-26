@@ -112,8 +112,16 @@ loop:
   block.
 - **Backoff:** exponential base 2 s (2, 4, 8 s), jittered ±20%. When the
   response carries `Retry-After` (seconds or HTTP-date), use it instead
-  (clamped to 60 s). Backoff sleeps abort immediately on the job signal —
-  cancellation must never wait behind a sleep.
+  (clamped to 60 s). **`Retry-After` fallback rule:** if the header is
+  present but unparseable, or parses to a past/negative value, fall back
+  to the standard exponential backoff — never throw and never sleep 0 ms.
+  Backoff sleeps abort immediately on the job signal — cancellation must
+  never wait behind a sleep.
+- **Abort disambiguation (order is load-bearing):** when the request
+  aborts, check the job `signal.aborted` FIRST and return `cancelled`
+  immediately (no retry, no backoff) — only when the job signal is clean
+  may the abort be classified as a retryable `timeout_request`. Parent
+  cancellation (job cancel, pool wall-clock) must never trigger retries.
 - **Retryable set:** network errors, request timeouts, 408, 429, 499, all
   5xx, JSON parse failures on 200, missing/empty `choices` on 200.
   **Non-retryable:** all other 4xx (401/403/400/404/422…) — fail fast with
@@ -157,6 +165,12 @@ are wrong for them; no redeploy coordination beyond the npm pin bump.
    with `TimeoutError` when its signal fires; adapter retries then
    succeeds; and a permanently-hanging endpoint ends as `endpoint_error`
    (not `timeout`) after retries exhaust.
+8b. Job-signal abort during a hung REQUEST (not just backoff): the fetch's
+   combined signal fires via the parent; outcome is `cancelled` with ZERO
+   retry attempts (assert fetch call count).
+8c. `Retry-After` fallback: an unparseable `Retry-After: banana` header
+   falls back to exponential backoff (no throw, no 0 ms sleep), then
+   succeeds on retry.
 9. Job-signal abort during backoff: cancellation resolves promptly (does
    not wait out the sleep), outcome `cancelled`.
 10. Existing suite still passes unchanged except: the existing
