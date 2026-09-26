@@ -197,7 +197,10 @@ export class HarnessAdapter {
           // classify as cancelled FIRST, never as parse_error. (Body cleanup on
           // the cancelled return is owned by the fetch signal.)
           if (signal.aborted) return outcome('cancelled');
-          const failureClass = (err as Error)?.name === 'TimeoutError' ? 'timeout_request' : 'parse_error';
+          const failureClass =
+            (err as Error)?.name === 'TimeoutError' || (err as Error)?.name === 'AbortError'
+              ? 'timeout_request'
+              : 'parse_error';
           if (!this.maybeRetry(failureClass, '200', attempts, started)) return outcome('endpoint_error');
           await this.backoffSleep(attempts, signal, undefined);
           if (signal.aborted) return outcome('cancelled');

@@ -481,6 +481,35 @@ describe('HarnessAdapter retry + per-request timeout (spec #8)', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1); // zero retries after cancellation
   });
 
+  it('job-signal abort during the FINAL attempt (retries exhausted) still ends cancelled, not endpoint_error', async () => {
+    // CodeRabbit docs:101: on the last attempt the catch would otherwise take
+    // the maybeRetry-false path to endpoint_error; the signal check must run
+    // before that on EVERY catch, not just the mid-retry ones.
+    vi.useFakeTimers();
+    const ac = new AbortController();
+    let calls = 0;
+    const fetchImpl = vi.fn(async (_url: unknown, init: RequestInit) => {
+      calls += 1;
+      if (calls < 4) return new Response('nope', { status: 500 });
+      // Final attempt hangs in flight until its signal aborts.
+      await new Promise((_resolve, reject) => {
+        init.signal!.addEventListener('abort', () => reject(init.signal!.reason), { once: true });
+      });
+      throw new Error('unreachable');
+    });
+    const adapter = new HarnessAdapter({ endpoint, fetchImpl: fetchImpl as unknown as typeof fetch });
+    const run = adapter.run(ws(), job(), ac.signal);
+    // Exhaust 3 attempts + backoffs (worst-case jitter < 15.6s), landing the
+    // final attempt in flight, then cancel mid-flight.
+    await vi.advanceTimersByTimeAsync(16_000);
+    expect(fetchImpl).toHaveBeenCalledTimes(4); // final attempt in flight
+    ac.abort();
+    await vi.advanceTimersByTimeAsync(1_000);
+    const outcome = await run;
+    expect(outcome.exitReason).toBe('cancelled');
+    expect(fetchImpl).toHaveBeenCalledTimes(4); // no 5th attempt
+  });
+
   it('retries a 200 with a choice missing `message` (shape_error), then succeeds', async () => {
     // `null` body and `choices:[{}]` previously threw past all classification
     // (null.choices TypeError / undefined pushed into messages) — review

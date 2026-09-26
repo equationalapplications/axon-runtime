@@ -108,10 +108,12 @@ loop:
   ... existing happy path ...
 ```
 
-- **Retry budget:** default `max_retries: 3` per STEP (not per job), so a
-  60-step job cannot accumulate 180 retries; the wall-clock and budget caps
-  still bound the total. Configurable via the same deploy-config endpoint
-  block.
+- **Retry budget:** default `max_retries: 3` per STEP (not per job). The
+  budget does not accumulate across steps — each step gets a fresh 3 — so a
+  60-step job could in principle run 180 retry attempts in total (60 × 3);
+  in practice the job's wall-clock `timeout_seconds` and spend caps bound
+  the real total long before that. Configurable via the same deploy-config
+  endpoint block.
 - **Backoff:** exponential base 2 s (2, 4, 8 s), jittered ±20%. When the
   response carries `Retry-After` (seconds or HTTP-date), use it instead
   (clamped to 60 s). **`Retry-After` fallback rule:** if the header is
@@ -185,10 +187,14 @@ are wrong for them; no redeploy coordination beyond the npm pin bump.
 
 ## Risks / notes
 
-- **Longer wall-clock worst case:** retries extend a failing job's life
-  (default worst case ≈ 3 × (timeout or backoff) per step). The pool's
-  wall-clock timer still cancels it — retry is bounded by the job's
-  `timeout_seconds`, and backoff/timeout paths abort on the job signal.
+- **Longer wall-clock worst case:** retries extend a failing job's life.
+  Worst case per step is `4T + 3B` — four request attempts each up to
+  `T = request_timeout_ms` (10 min default), separated by three backoff
+  sleeps of up to `B` (8 s jittered, or up to 60 s under `Retry-After`) —
+  i.e. ~40 minutes for one step under default settings if the endpoint
+  accepts connections but never responds. The pool's wall-clock timer
+  still cancels it — retry is bounded by the job's `timeout_seconds`, and
+  backoff/timeout paths abort on the job signal.
 - **Z.ai 429 storms:** `Retry-After` honoring plus the per-step retry cap
   keeps us polite; a persistent 429 ends the job as `endpoint_error`
   rather than looping for the job's whole wall clock.
