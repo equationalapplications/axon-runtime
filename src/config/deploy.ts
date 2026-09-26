@@ -2,6 +2,10 @@ import { readFileSync } from 'node:fs';
 import { z } from 'zod';
 import { ConstraintsSchema, type Constraints } from '../contract/schema.js';
 
+/** Single source of truth for retry defaults (the adapter imports these). */
+export const DEFAULT_REQUEST_TIMEOUT_MS = 600_000;
+export const DEFAULT_MAX_RETRIES = 3;
+
 const FileSchema = z
   .object({
     node_id: z.string().min(1),
@@ -20,6 +24,8 @@ const FileSchema = z
         base_url: z.string().url(),
         model: z.string().min(1),
         api_key_env: z.string().min(1),
+        request_timeout_ms: z.number().int().positive().optional(),
+        max_retries: z.number().int().nonnegative().optional(),
       })
       .strict(),
   })
@@ -37,7 +43,13 @@ export interface DeployConfig {
   maxContextBytes: number;
   maxInlinePatchBytes: number;
   artifactTtlDays: number;
-  endpoint: { baseUrl: string; model: string; apiKey: string };
+  endpoint: {
+    baseUrl: string;
+    model: string;
+    apiKey: string;
+    requestTimeoutMs?: number;
+    maxRetries?: number;
+  };
 }
 
 function requireEnv(env: NodeJS.ProcessEnv, name: string): string {
@@ -65,6 +77,8 @@ export function loadDeployConfig(path: string, env: NodeJS.ProcessEnv): DeployCo
       baseUrl: parsed.endpoint.base_url,
       model: parsed.endpoint.model,
       apiKey: requireEnv(env, parsed.endpoint.api_key_env),
+      requestTimeoutMs: parsed.endpoint.request_timeout_ms ?? DEFAULT_REQUEST_TIMEOUT_MS,
+      maxRetries: parsed.endpoint.max_retries ?? DEFAULT_MAX_RETRIES,
     },
   };
 }

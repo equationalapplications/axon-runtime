@@ -37,6 +37,32 @@ describe('loadDeployConfig', () => {
     expect(cfg.maxInlinePatchBytes).toBe(1_048_576);
     expect(cfg.maxGoalBytes).toBe(32_768);
     expect(cfg.maxContextBytes).toBe(1_048_576);
+    expect(cfg.endpoint.requestTimeoutMs).toBe(600_000);
+    expect(cfg.endpoint.maxRetries).toBe(3);
+  });
+
+  it('honors explicit endpoint timeout/retry overrides', () => {
+    const cfg = loadDeployConfig(
+      writeConfig({ endpoint: { ...raw.endpoint, request_timeout_ms: 120_000, max_retries: 0 } }),
+      env,
+    );
+    expect(cfg.endpoint.requestTimeoutMs).toBe(120_000);
+    expect(cfg.endpoint.maxRetries).toBe(0);
+  });
+
+  it('rejects a non-positive request_timeout_ms', () => {
+    expect(() =>
+      loadDeployConfig(writeConfig({ endpoint: { ...raw.endpoint, request_timeout_ms: 0 } }), env),
+    ).toThrow();
+    expect(() =>
+      loadDeployConfig(writeConfig({ endpoint: { ...raw.endpoint, request_timeout_ms: -1000 } }), env),
+    ).toThrow();
+  });
+
+  it('rejects a negative max_retries', () => {
+    expect(() =>
+      loadDeployConfig(writeConfig({ endpoint: { ...raw.endpoint, max_retries: -1 } }), env),
+    ).toThrow();
   });
 
   it('honors explicit non-default byte/TTL overrides', () => {
