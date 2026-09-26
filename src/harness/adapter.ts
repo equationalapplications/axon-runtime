@@ -1,6 +1,6 @@
 import { execa } from 'execa';
 import { childEnv } from './child-env.js';
-import type { DeployConfig } from '../config/deploy.js';
+import { DEFAULT_MAX_RETRIES, DEFAULT_REQUEST_TIMEOUT_MS, type DeployConfig } from '../config/deploy.js';
 import type { ExitReason, JobRequest } from '../contract/schema.js';
 import type { Workspace } from '../executor/types.js';
 
@@ -42,6 +42,32 @@ const TOOLS = [
   },
 ];
 
+interface ChatCompletionBody {
+  model?: string;
+  choices: { finish_reason: string; message: ChatMessage }[];
+  usage?: { prompt_tokens?: number; completion_tokens?: number };
+}
+
+/** "All 5xx" per spec, plus the explicit transient 4xx trio. */
+export const isRetryableStatus = (status: number): boolean =>
+  (status >= 500 && status <= 599) || status === 408 || status === 429 || status === 499;
+const BASE_BACKOFF_MS = 2_000;
+const MAX_RETRY_AFTER_MS = 60_000;
+
+/** Parse a Retry-After header (seconds or HTTP-date); null when absent/unparseable/past/negative. */
+function parseRetryAfter(header: string | null | undefined, now: number): number | null {
+  if (!header) return null;
+  const trimmed = header.trim();
+  if (/^\d+$/.test(trimmed)) {
+    const ms = Number(trimmed) * 1_000;
+    return ms > 0 ? ms : null;
+  }
+  const date = Date.parse(trimmed);
+  if (Number.isNaN(date)) return null;
+  const ms = date - now;
+  return ms > 0 ? ms : null;
+}
+
 const SYSTEM_PROMPT = [
   'You are an Axon subagent working inside a disposable git worktree.',
   'Make the requested change by running shell commands with the run_shell tool.',
@@ -53,6 +79,8 @@ export class HarnessAdapter {
   private readonly endpoint: DeployConfig['endpoint'];
   private readonly fetchImpl: typeof fetch;
   private readonly onStep?: (step: number, costUsd: number) => void;
+  private readonly requestTimeoutMs: number;
+  private readonly maxRetries: number;
 
   constructor(opts: {
     endpoint: DeployConfig['endpoint'];
@@ -62,6 +90,8 @@ export class HarnessAdapter {
     this.endpoint = opts.endpoint;
     this.fetchImpl = opts.fetchImpl ?? fetch;
     this.onStep = opts.onStep;
+    this.requestTimeoutMs = opts.endpoint.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    this.maxRetries = opts.endpoint.maxRetries ?? DEFAULT_MAX_RETRIES;
   }
 
   async run(ws: Workspace, job: JobRequest, signal: AbortSignal): Promise<HarnessOutcome> {
@@ -83,36 +113,127 @@ export class HarnessAdapter {
 
     while (steps < job.constraints.max_harness_steps) {
       if (signal.aborted) return outcome('cancelled');
-      steps += 1;
 
-      let response: Response;
-      try {
-        response = await this.fetchImpl(`${this.endpoint.baseUrl}/chat/completions`, {
-          method: 'POST',
-          headers: {
-            authorization: `Bearer ${this.endpoint.apiKey}`,
-            'content-type': 'application/json',
-          },
-          body: JSON.stringify({ model: this.endpoint.model, messages, tools: TOOLS }),
+      // Attempt loop (spec §Design.2): retried attempts live INSIDE the step —
+      // `steps += 1` and `onStep` fire only for a step that produces an
+      // assistant message, so retries never inflate step counts or cost.
+      let body: ChatCompletionBody | undefined;
+      let attempts = 0;
+      for (;;) {
+        const started = Date.now();
+        let response: Response;
+        try {
+          response = await this.fetchImpl(`${this.endpoint.baseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: {
+              authorization: `Bearer ${this.endpoint.apiKey}`,
+              'content-type': 'application/json',
+            },
+            body: JSON.stringify({ model: this.endpoint.model, messages, tools: TOOLS }),
+            // Job signal stays authoritative via AbortSignal.any: cancellation
+            // and the pool wall-clock cut into a hung request immediately.
+            signal: AbortSignal.any([signal, AbortSignal.timeout(this.requestTimeoutMs)]),
+          });
+        } catch (err) {
+          // Order is load-bearing (spec): job-signal abort FIRST → cancelled,
+          // zero retries. Parent cancellation must never trigger retries.
+          if (signal.aborted) return outcome('cancelled');
+          // Classify honestly: AbortSignal.timeout rejects with TimeoutError;
+          // everything else is a network-level failure (DNS, reset, …).
+          const failureClass = (err as Error)?.name === 'TimeoutError' ? 'timeout_request' : 'network_error';
+          if (!this.maybeRetry(failureClass, '-', attempts, started)) return outcome('endpoint_error');
+          await this.backoffSleep(attempts, signal, undefined);
+          if (signal.aborted) return outcome('cancelled');
+          attempts += 1;
+          continue;
+        }
+
+        if (!response.ok) {
+          const status = response.status;
+          // "All 5xx" per spec — range check, not a hand-listed set (Cloudflare
+          // 520-527 and 529 are exactly the transient gateways worth surviving).
+          // Body cleanup note: json()-locked/consumed streams cannot be
+          // cancelled manually; unread bodies are cancelled explicitly on each
+          // abandon path below.
+          if (isRetryableStatus(status)) {
+            const retrying = this.maybeRetry('http_error', String(status), attempts, started);
+            if (!retrying) {
+              await response.body?.cancel().catch(() => {});
+              return outcome('endpoint_error');
+            }
+            // Unread error body: release the socket now (the fetch signal would
+            // otherwise hold it until the 10-min timeout or GC).
+            await response.body?.cancel().catch(() => {});
+            await this.backoffSleep(attempts, signal, response.headers.get('retry-after'));
+            if (signal.aborted) return outcome('cancelled');
+            attempts += 1;
+            continue;
+          }
+          // Non-retryable 4xx (401/403/400/404/422…): fail fast, reusing the
+          // shared log format so attempts parse uniformly in the worker log.
+          this.logFailedAttempt('http_error', String(status), attempts, started);
+          await response.body?.cancel().catch(() => {});
+          return outcome('endpoint_error');
+        }
+
+        // Guard response.json() + choices[0]: a 200 with a malformed/truncated
+        // body previously threw past all classification. Now retryable like 5xx.
+        // The json() read races the job signal so cancellation cuts a hung body
+        // read promptly even when the fetch implementation doesn't propagate
+        // the signal into the body stream.
+        // Late-abort gap: an abort between fetch resolving and the listener
+        // below attaching would never fire — check before racing.
+        if (signal.aborted) return outcome('cancelled');
+        let parsed: unknown;
+        let onAbort: () => void;
+        const abortPromise = new Promise<never>((_, reject) => {
+          onAbort = () => reject(new DOMException('The operation was aborted.', 'AbortError'));
+          signal.addEventListener('abort', onAbort, { once: true });
         });
-      } catch {
-        return outcome('endpoint_error');
+        try {
+          parsed = await Promise.race([response.json(), abortPromise]);
+        } catch (err) {
+          // Order is load-bearing: a cancel/timeout landing mid-body-read must
+          // classify as cancelled FIRST, never as parse_error. (Body cleanup on
+          // the cancelled return is owned by the fetch signal.)
+          if (signal.aborted) return outcome('cancelled');
+          const failureClass = (err as Error)?.name === 'TimeoutError' ? 'timeout_request' : 'parse_error';
+          if (!this.maybeRetry(failureClass, '200', attempts, started)) return outcome('endpoint_error');
+          await this.backoffSleep(attempts, signal, undefined);
+          if (signal.aborted) return outcome('cancelled');
+          attempts += 1;
+          continue;
+        } finally {
+          signal.removeEventListener('abort', onAbort!);
+        }
+        // Shape check BEFORE use: `null` is valid JSON and a choice without a
+        // `message` would push undefined into the conversation and throw later
+        // (review cycle-2 MAJOR 1). Both retry like any other bad 200.
+        const candidate = parsed as ChatCompletionBody | null;
+        if (!candidate?.choices?.[0]?.message) {
+          if (!this.maybeRetry('shape_error', '200', attempts, started)) return outcome('endpoint_error');
+          await this.backoffSleep(attempts, signal, undefined);
+          if (signal.aborted) return outcome('cancelled');
+          attempts += 1;
+          continue;
+        }
+        body = candidate;
+        if (!body.choices?.[0]) {
+          if (!this.maybeRetry('empty_choices', '200', attempts, started)) return outcome('endpoint_error');
+          await this.backoffSleep(attempts, signal, undefined);
+          if (signal.aborted) return outcome('cancelled');
+          attempts += 1;
+          continue;
+        }
+        break;
       }
-      if (!response.ok) return outcome('endpoint_error');
 
-      const body = (await response.json()) as {
-        model?: string;
-        choices: { finish_reason: string; message: ChatMessage }[];
-        usage?: { prompt_tokens?: number; completion_tokens?: number };
-      };
-
-      modelId = body.model ?? modelId;
-      tokensIn += body.usage?.prompt_tokens ?? 0;
-      tokensOut += body.usage?.completion_tokens ?? 0;
+      steps += 1;
+      const choice = body!.choices[0]!;
+      modelId = body!.model ?? modelId;
+      tokensIn += body!.usage?.prompt_tokens ?? 0;
+      tokensOut += body!.usage?.completion_tokens ?? 0;
       this.onStep?.(steps, cost());
-
-      const choice = body.choices[0];
-      if (!choice) return outcome('endpoint_error');
       messages.push(choice.message);
 
       const calls = choice.message.tool_calls ?? [];
@@ -140,6 +261,52 @@ export class HarnessAdapter {
       .map((f) => `--- ${f.path} ---\n${f.content}`)
       .join('\n\n');
     return context ? `${job.goal}\n\nContext files:\n${context}` : job.goal;
+  }
+
+  /**
+   * Decide whether another attempt may run. Logs the failed attempt and
+   * returns false (fail fast → endpoint_error) when the retry budget is spent.
+   */
+  private maybeRetry(failureClass: string, status: string, attempts: number, started: number): boolean {
+    this.logFailedAttempt(failureClass, status, attempts, started);
+    return attempts < this.maxRetries;
+  }
+
+  /** Single log format for failed attempts (worker-log channel). */
+  private logFailedAttempt(failureClass: string, status: string, attempts: number, started: number): void {
+    console.warn(
+      `attempt ${attempts + 1}/${this.maxRetries + 1} failed: ${failureClass} status=${status} elapsed_ms=${Date.now() - started}`,
+    );
+  }
+
+  /**
+   * Sleep between attempts: Retry-After when parseable (clamped ≤ 60s),
+   * otherwise exponential 2/4/8s jittered ±20%. Aborts immediately on the
+   * job signal; unparseable/past/negative Retry-After falls back to the
+   * exponential schedule — never throws, never sleeps 0 ms.
+   */
+  private async backoffSleep(attempts: number, signal: AbortSignal, retryAfter?: string | null): Promise<void> {
+    if (signal.aborted) return; // pre-aborted: never sleep
+    const jitter = 1 + (Math.random() * 0.4 - 0.2); // ±20%
+    const exponential = BASE_BACKOFF_MS * 2 ** attempts * jitter;
+    const parsed = parseRetryAfter(retryAfter, Date.now());
+    const ms = parsed !== null ? Math.min(parsed, MAX_RETRY_AFTER_MS) : Math.max(1, exponential);
+    await new Promise<void>((resolve) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const onAbort = () => {
+        if (timer !== undefined) clearTimeout(timer);
+        resolve();
+      };
+      // Remove the listener on the normal-timer path too — the job signal lives
+      // for the whole job, so `once` alone would let listeners pile up across
+      // steps (Node MaxListenersExceededWarning past 10 retries).
+      const onTimer = () => {
+        signal.removeEventListener('abort', onAbort);
+        resolve();
+      };
+      timer = setTimeout(onTimer, ms);
+      signal.addEventListener('abort', onAbort, { once: true });
+    });
   }
 
   private async runTool(ws: Workspace, rawArgs: string): Promise<string> {
