@@ -133,11 +133,14 @@ export class HarnessAdapter {
             // and the pool wall-clock cut into a hung request immediately.
             signal: AbortSignal.any([signal, AbortSignal.timeout(this.requestTimeoutMs)]),
           });
-        } catch {
+        } catch (err) {
           // Order is load-bearing (spec): job-signal abort FIRST → cancelled,
           // zero retries. Parent cancellation must never trigger retries.
           if (signal.aborted) return outcome('cancelled');
-          if (!this.maybeRetry('timeout_request', '-', attempts, started)) return outcome('endpoint_error');
+          // Classify honestly: AbortSignal.timeout rejects with TimeoutError;
+          // everything else is a network-level failure (DNS, reset, …).
+          const failureClass = (err as Error)?.name === 'TimeoutError' ? 'timeout_request' : 'network_error';
+          if (!this.maybeRetry(failureClass, '-', attempts, started)) return outcome('endpoint_error');
           await this.backoffSleep(attempts, signal, undefined);
           if (signal.aborted) return outcome('cancelled');
           attempts += 1;
@@ -146,8 +149,13 @@ export class HarnessAdapter {
 
         if (!response.ok) {
           const status = response.status;
-          if (RETRYABLE_STATUS.has(status)) {
+          // "All 5xx" per spec — range check, not a hand-listed set (Cloudflare
+          // 520-527 and 529 are exactly the transient gateways worth surviving).
+          if ((status >= 500 && status <= 599) || status === 408 || status === 429 || status === 499) {
             if (!this.maybeRetry('http_error', String(status), attempts, started)) return outcome('endpoint_error');
+            // Release the socket of the response we're abandoning (undici holds
+            // it until GC otherwise).
+            await response.body?.cancel().catch(() => {});
             await this.backoffSleep(attempts, signal, response.headers.get('retry-after'));
             if (signal.aborted) return outcome('cancelled');
             attempts += 1;
@@ -164,7 +172,12 @@ export class HarnessAdapter {
         try {
           parsed = await response.json();
         } catch {
+          // Order is load-bearing: a cancel/timeout landing mid-body-read must
+          // classify as cancelled FIRST, never as parse_error.
+          if (signal.aborted) return outcome('cancelled');
           if (!this.maybeRetry('parse_error', '200', attempts, started)) return outcome('endpoint_error');
+          // Release the abandoned body's socket.
+          await response.body?.cancel().catch(() => {});
           await this.backoffSleep(attempts, signal, undefined);
           if (signal.aborted) return outcome('cancelled');
           attempts += 1;
@@ -234,20 +247,26 @@ export class HarnessAdapter {
    * exponential schedule — never throws, never sleeps 0 ms.
    */
   private async backoffSleep(attempts: number, signal: AbortSignal, retryAfter?: string | null): Promise<void> {
+    if (signal.aborted) return; // pre-aborted: never sleep
     const jitter = 1 + (Math.random() * 0.4 - 0.2); // ±20%
     const exponential = BASE_BACKOFF_MS * 2 ** attempts * jitter;
     const parsed = parseRetryAfter(retryAfter, Date.now());
     const ms = parsed !== null ? Math.min(parsed, MAX_RETRY_AFTER_MS) : Math.max(1, exponential);
     await new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, ms);
-      signal.addEventListener(
-        'abort',
-        () => {
-          clearTimeout(timer);
-          resolve();
-        },
-        { once: true },
-      );
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const onAbort = () => {
+        if (timer !== undefined) clearTimeout(timer);
+        resolve();
+      };
+      // Remove the listener on the normal-timer path too — the job signal lives
+      // for the whole job, so `once` alone would let listeners pile up across
+      // steps (Node MaxListenersExceededWarning past 10 retries).
+      const onTimer = () => {
+        signal.removeEventListener('abort', onAbort);
+        resolve();
+      };
+      timer = setTimeout(onTimer, ms);
+      signal.addEventListener('abort', onAbort, { once: true });
     });
   }
 
