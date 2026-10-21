@@ -1,9 +1,14 @@
 # Spec: DSH×CT groundwork — generic worker system-prompt extension
 
 Repo: axon-runtime. Date: 2026-10-21. Author: Tessera.
-Status: REVISED after Tier 2 review (REQUEST CHANGES — MAJOR 1
-re-inlining claim corrected; MINOR: grep gate widened to `\bCT\b`;
-constraints confirmed satisfied against sources).
+Status: APPROVED at Tier 2 (round 2 delta review, 2026-10-21 — MAJOR 1
+re-inlining claim corrected in both Problem and Options; MINOR grep gate
+widened to `\bCT\b`). Q1–Q4 dispositions by Tessera, post-approval:
+Q1 top-level placement (harness-wide posture, not endpoint properties);
+Q2 fixed 16 KiB cap (a config-declared ceiling is machinery without a
+consumer); Q3 startup log carries presence + byte count only, never
+contents; Q4 field name stays `extra_system_prompt`.
+Next gate: Tier 3 Opus review, then Kurt approval (spec merge gate).
 Issue: none yet (groundwork for the axon-queue item 2; sequencing memo
 `axon` repo `docs/superpowers/specs/2026-09-26-dsh-ct-sequencing-memo.md`).
 Basis: 2026-10-21 Kurt rulings (CTI-as-dependency; public repo supports the
@@ -21,10 +26,11 @@ putting text in front of the model, and every current route to that text is
 either ad-hoc or wrongly scoped:
 
 - `SYSTEM_PROMPT` is a hardcoded const in `adapter.ts` — no extension point.
-- `job.context` files are caller-supplied and re-inlined **every step**
-  (`userPrompt()`), so per-deployment standing instructions would either be
-  duplicated into every job payload (caller's burden, repeated token cost)
-  or not exist.
+- `job.context` files are caller-supplied; `userPrompt()` inlines them into
+  the first user message **once**, but the text then rides in the
+  `messages` history that is resent in **every request body**, so
+  per-deployment standing instructions would either be duplicated into
+  every job payload (caller's burden, recurring token cost) or not exist.
 - Today the only way to give workers CT awareness is to fork the prompt —
   exactly what "public repo supports it generically" forbids.
 
