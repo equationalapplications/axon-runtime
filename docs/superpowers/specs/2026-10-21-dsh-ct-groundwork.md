@@ -1,14 +1,17 @@
 # Spec: DSH×CT groundwork — generic worker system-prompt extension
 
 Repo: axon-runtime. Date: 2026-10-21. Author: Tessera.
-Status: APPROVED at Tier 2 (round 2 delta review, 2026-10-21 — MAJOR 1
-re-inlining claim corrected in both Problem and Options; MINOR grep gate
-widened to `\bCT\b`). Q1–Q4 dispositions by Tessera, post-approval:
-Q1 top-level placement (harness-wide posture, not endpoint properties);
-Q2 fixed 16 KiB cap (a config-declared ceiling is machinery without a
-consumer); Q3 startup log carries presence + byte count only, never
-contents; Q4 field name stays `extra_system_prompt`.
-Next gate: Tier 3 Opus review, then Kurt approval (spec merge gate).
+Status: Tier 2 APPROVED (2 rounds, 2026-10-21). Tier 3 Opus review:
+REQUEST CHANGES (2026-10-21, $0.51) — M2 (token-cost claim) fixed,
+m1–m5 folded (byte-based cap matching `max_goal_bytes`, whitespace-only
+rejection, startup-log design step, README/examples docs note,
+exact-equality AC1, startup-stdout AC6). **M1 OPEN — needs Kurt:** the
+spec names CT in this public repo (Constraint 1 scope vs design-doc
+practice); resolution pending his ruling, tracked as AC7.
+Q1–Q4 dispositions: Q1 top-level placement; Q2 16,384 UTF-8-byte cap
+(fixed value, matching `max_goal_bytes` convention); Q3 startup log
+carries presence + byte count only, never contents (now Design step 4);
+Q4 field name stays `extra_system_prompt`.
 Issue: none yet (groundwork for the axon-queue item 2; sequencing memo
 `axon` repo `docs/superpowers/specs/2026-09-26-dsh-ct-sequencing-memo.md`).
 Basis: 2026-10-21 Kurt rulings (CTI-as-dependency; public repo supports the
@@ -85,8 +88,10 @@ built-in `SYSTEM_PROMPT` at adapter construction.
 
 - ✅ Generic: no CT references; any deployment can append standing
   instructions (CT wording, house rules, output conventions).
-- ✅ Correct trust side and pay-once cost: one system message, not per-step
-  inlining.
+- ✅ Correct trust side and correct role placement. (Token cost per request
+  is the **same** as a context file — the system message is element 0 of
+  `messages` and rides in every request body. The advantage is posture, not
+  spend.)
 - ✅ Tiny blast radius: schema field + config plumb + adapter append +
   tests. Contract untouched; wire format unchanged.
 - ✅ Matches the ruling's shape exactly ("deploy-config option that appends
@@ -112,19 +117,27 @@ each job workspace and reference it from the prompt.
 ## Design
 
 1. **Schema** (`src/config/deploy.ts`): optional top-level
-   `extra_system_prompt: z.string().min(1).max(16_384).optional()` on the
-   strict `FileSchema`. 16 KiB cap ≈ half the goal cap; a system-prompt
-   addendum larger than that is a deployment smell. Surface as
+   `extra_system_prompt` on the strict `FileSchema` —
+   `z.string().refine(s => s.trim().length > 0).refine(s =>
+   Buffer.byteLength(s, 'utf8') <= 16_384).optional()` (16,384 **UTF-8
+   bytes**, matching the `max_goal_bytes` convention, and rejecting
+   whitespace-only values). Surface as
    `DeployConfig.extraSystemPrompt?: string`.
 2. **Adapter** (`src/harness/adapter.ts`): constructor takes
    `extraSystemPrompt?: string`; the system message content becomes
-   `SYSTEM_PROMPT + (extra ? '\n\n' + extra : '')`, computed **once** in the
-   constructor (never per step). Built-in `SYSTEM_PROMPT` const unchanged.
+   `SYSTEM_PROMPT + (extra ? '\n\n' + extra : '')`, built once per adapter
+   instance. This is code hygiene, not a token saving: the system message
+   is resent in every request body like the rest of `messages`. Built-in
+   `SYSTEM_PROMPT` const unchanged.
 3. **Plumb** (`src/executor/local.ts`): `LocalExecutor` passes
    `extraSystemPrompt: this.cfg.extraSystemPrompt` to the adapter.
-4. **Docs**: README config section documents the field generically (no CT
-   examples; one neutral example, e.g. "always run the project's test
-   command before summarizing").
+4. **Startup log** (`src/worker.ts`, after `loadDeployConfig`): one line —
+   `extra_system_prompt: set (<n> bytes)` or `extra_system_prompt: unset`.
+   Presence + size only; **never** log the wording.
+5. **Docs**: add a short field note to README's config area and an optional
+   `extra_system_prompt` entry in `examples/node.json` with a neutral
+   example (e.g. "always run the project's test command before
+   summarizing"). No consumer-specific wording anywhere.
 
 ## Non-goals
 
@@ -138,16 +151,25 @@ each job workspace and reference it from the prompt.
 
 ## Acceptance criteria
 
-1. Config with `extra_system_prompt` parses; the text appears once in the
-   system message of the first (and every) request.
+1. Config with `extra_system_prompt` parses; the system message content of
+   every request is exactly `SYSTEM_PROMPT + '\n\n' + extra` (exact-equality
+   assertion on captured request bodies — covers "appears once" without a
+   substring count).
 2. Config without it produces the exact current system message (regression
    guard: string equality on captured request bodies).
-3. Config validation rejects: empty string, > 16384 chars, wrong type
-   (strict schema already rejects unknown keys).
+3. Config validation rejects: empty string, whitespace-only string
+   (e.g. `"\n"`, `"  "`), > 16,384 UTF-8 bytes, wrong type (strict schema
+   already rejects unknown keys).
 4. `npm run typecheck`, `npm run test` (vitest, low `-j`), `npm run build`
    pass.
 5. Grep gate over `src/` on this branch: no occurrence of
    `curated[-_]thoughts` or `\bCT\b` (case-sensitive).
+6. Startup stdout contains the field's byte count and does **not** contain
+   any part of the configured wording.
+7. Genericity gate (pending M1 ruling): the *shipped* artifacts (`src/`,
+   `README.md`, `examples/`) contain no consumer naming. Whether design
+   docs in this public repo may name the consumer is the open M1 question
+   for Kurt.
 
 ## Open questions for review
 
