@@ -1,7 +1,9 @@
 # Spec: DSH×CT groundwork — generic worker system-prompt extension
 
 Repo: axon-runtime. Date: 2026-10-21. Author: Tessera.
-Status: DRAFT (review ladder in progress).
+Status: REVISED after Tier 2 review (REQUEST CHANGES — MAJOR 1
+re-inlining claim corrected; MINOR: grep gate widened to `\bCT\b`;
+constraints confirmed satisfied against sources).
 Issue: none yet (groundwork for the axon-queue item 2; sequencing memo
 `axon` repo `docs/superpowers/specs/2026-09-26-dsh-ct-sequencing-memo.md`).
 Basis: 2026-10-21 Kurt rulings (CTI-as-dependency; public repo supports the
@@ -57,8 +59,13 @@ The private side writes CT-usage instructions into a context file in every
 job it submits.
 
 - ✅ Zero code; shippable today.
-- ❌ Re-inlined verbatim **every step** by `userPrompt()` — standing
-  instructions multiply by step count for zero conversational benefit.
+- ❌ Standing text is inlined into the first user message **once** by
+  `userPrompt()` — but it still rides in the `messages` history that is
+  **resent in every request body**, so the token cost recurs per step for
+  zero conversational benefit. (The same is true of any system-prompt
+  text; the difference is that standing deployment instructions belong in
+  the system role, where they are also sent once per request but are
+  correctly positioned for the model.)
 - ❌ Caller burden: every job author must remember the convention; nothing
   enforces it.
 - ❌ Wrong trust side: per-deployment posture set by job submitters.
@@ -133,8 +140,8 @@ each job workspace and reference it from the prompt.
    (strict schema already rejects unknown keys).
 4. `npm run typecheck`, `npm run test` (vitest, low `-j`), `npm run build`
    pass.
-5. Grep gate: no occurrence of `curated.thoughts|curated_thoughts|\bct\b
-   wisdom` in `src/` on this branch.
+5. Grep gate over `src/` on this branch: no occurrence of
+   `curated[-_]thoughts` or `\bCT\b` (case-sensitive).
 
 ## Open questions for review
 
