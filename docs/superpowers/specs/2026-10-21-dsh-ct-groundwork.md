@@ -12,11 +12,16 @@ Q1–Q4 dispositions: Q1 top-level placement; Q2 16,384 UTF-8-byte cap
 (fixed value, matching `max_goal_bytes` convention); Q3 startup log
 carries presence + byte count only, never contents (now Design step 4);
 Q4 field name stays `extra_system_prompt`.
-Issue: none yet (groundwork for the axon-queue item 2; sequencing memo
-`axon` repo `docs/superpowers/specs/2026-09-26-dsh-ct-sequencing-memo.md`).
+M1 RESOLVED (Kurt ruling 2026-10-21, option 2): CT may be named — it is
+open-source — but public docs carry no private internal usage details
+(host names, private repo paths, internal wiring); written to be
+understandable to outside contributors. Spec scrubbed accordingly
+(Constraint 1 rewritten; private details removed).
+Issue: none yet (groundwork for the axon-queue item 2; builds on the
+private sequencing memo held in the private deployment repo).
 Basis: 2026-10-21 Kurt rulings (CTI-as-dependency; public repo supports the
-SynapseTree wisdom roadmap **generically**; internal axon tool gets the
-intuitive wisdom), verified against `main` @ `e0b4632`
+wisdom roadmap **generically** — private deployments carry the specifics),
+verified against `main` @ `e0b4632`
 (`adapter.ts`, `config/deploy.ts`, `executor/local.ts`, `contract/schema.ts`).
 
 ## Problem
@@ -39,15 +44,18 @@ either ad-hoc or wrongly scoped:
 
 The gap is generic: **axon-runtime has no way for a deployment operator to
 append standing instructions to the worker's system prompt.** CT is merely
-the first consumer (the private axon deploy would supply wording directing
-workers to read-only `ct wisdom match` via `run_shell`); deploy-specific
+the first consumer (a private deployment could supply wording directing
+workers to read-only CT CLI usage via `run_shell`); deploy-specific
 house rules are the obvious second consumer.
 
 ## Constraints (from rulings and prior reviews)
 
-1. **CT is never named in axon-runtime.** The public repo ships a generic
-   mechanism; the private axon repo / job submitter supplies any CT wording.
-   (2026-10-21 ruling: CTI consumed as a dependency; public side generic.)
+1. **Generic public surface.** CT may be named in this repo — it is an
+   open-source project (Kurt ruling, 2026-10-21) — but no **private
+   internal usage details**: no host names, private repo paths, or
+   internal deployment wiring. Docs must be understandable to any outside
+   contributor without wading through EA's private implementation. The
+   private deployment side supplies any consumer-specific wording.
 2. **Sep 26 constraint:** never expose CT read+write over the axon tunnel —
    read-only only. This spec does not implement CT access at all; it only
    creates the prompt extension point the private side will use to describe
@@ -97,8 +105,8 @@ built-in `SYSTEM_PROMPT` at adapter construction.
 - ✅ Matches the ruling's shape exactly ("deploy-config option that appends
   caller-supplied text to the worker system prompt" — supplied by the
   operator, not the job caller).
-- ❌ Requires worker deploy to take effect (macbook-01 already has a pending
-  deploy for 1.1.0; this would ride the next one).
+- ❌ Requires a worker deploy to take effect; it can ride the already
+  pending 1.1.0 worker deploy.
 - Verdict: **chosen.**
 
 ### Option 3 — generic skills/docs file shipping
@@ -141,7 +149,8 @@ each job workspace and reference it from the prompt.
 
 ## Non-goals
 
-- No CT code, CT wording, `ct` references, or MCP client in this repo.
+- No CT code, dependency, wiring, or MCP client in this repo. (Docs may
+  name CT per Constraint 1; the mechanism itself stays consumer-free.)
 - No contract/schema (v2) change; no job-level prompt fields (a job-level
   prompt field would let any submitter rewrite worker posture — rejected on
   trust grounds).
@@ -166,10 +175,9 @@ each job workspace and reference it from the prompt.
    `curated[-_]thoughts` or `\bCT\b` (case-sensitive).
 6. Startup stdout contains the field's byte count and does **not** contain
    any part of the configured wording.
-7. Genericity gate (pending M1 ruling): the *shipped* artifacts (`src/`,
-   `README.md`, `examples/`) contain no consumer naming. Whether design
-   docs in this public repo may name the consumer is the open M1 question
-   for Kurt.
+7. Genericity gate (per M1 ruling): no private internal usage details —
+   host names, private repo paths, internal deployment wiring — anywhere in
+   this repo's docs; consumer naming itself is permitted.
 
 ## Open questions for review
 
