@@ -137,7 +137,7 @@ jobs:
 
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
-          node-version: 24.10.0
+          node-version: 24.22.1
 
       - run: npm ci
 
@@ -482,7 +482,7 @@ jobs:
 
       - uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
-          node-version: 24.10.0
+          node-version: 24.22.1
           # npm OIDC trusted publishing: registry-url makes setup-node emit an
           # npmrc ($RUNNER_TEMP/.npmrc, wired via NPM_CONFIG_USERCONFIG) pointing
           # at npmjs. With `id-token: write` granted, npm >= 11.5 exchanges the
