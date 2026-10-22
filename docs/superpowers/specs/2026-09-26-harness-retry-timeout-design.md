@@ -152,7 +152,7 @@ request_timeout_ms?: number;  // default 600_000
 max_retries?: number;         // default 3
 ```
 
-Worker node configs (macbook-01 et al.) only need changes if the defaults
+Worker node configs only need changes if the defaults
 are wrong for them; no redeploy coordination beyond the npm pin bump.
 
 ## Acceptance tests (extend `tests/harness/adapter.test.ts`)
