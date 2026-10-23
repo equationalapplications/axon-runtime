@@ -1,3 +1,9 @@
+## [1.3.0](https://github.com/equationalapplications/axon-runtime/compare/v1.2.0...v1.3.0) (2026-10-23)
+
+### Features
+
+* **config:** trailing /* wildcard entries in repo_allowlist ([93c4661](https://github.com/equationalapplications/axon-runtime/commit/93c466114486ec8de6d0bb9b81a30c2a70fae3f4))
+
 ## [1.2.0](https://github.com/equationalapplications/axon-runtime/compare/v1.1.0...v1.2.0) (2026-10-23)
 
 ### Features
