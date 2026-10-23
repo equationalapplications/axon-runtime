@@ -1,3 +1,4 @@
+import { isRepoAllowed } from '../config/allowlist.js';
 import type { DeployConfig } from '../config/deploy.js';
 import { RejectError } from '../contract/errors.js';
 import { CONTRACT_VERSION, JobRequestSchema, type JobRequest } from '../contract/schema.js';
@@ -18,7 +19,7 @@ export function validateJob(body: unknown, cfg: DeployConfig): JobRequest {
   }
   const job = parsed.data;
 
-  if (!cfg.repoAllowlist.includes(job.repo)) {
+  if (!isRepoAllowed(job.repo, cfg.repoAllowlist)) {
     throw new RejectError('repo_not_allowlisted', `repo not allowlisted: ${job.repo}`);
   }
 

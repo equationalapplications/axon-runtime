@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { z } from 'zod';
 import { ConstraintsSchema, type Constraints } from '../contract/schema.js';
+import { allowlistEntryError } from './allowlist.js';
 
 /** Single source of truth for retry defaults (the adapter imports these). */
 export const DEFAULT_REQUEST_TIMEOUT_MS = 600_000;
@@ -12,7 +13,14 @@ const FileSchema = z
     home: z.string().min(1),
     bearer_token_env: z.string().min(1),
     max_concurrent_jobs: z.number().int().positive(),
-    repo_allowlist: z.array(z.string().min(1)).min(1),
+    repo_allowlist: z
+      .array(
+        z.string().min(1).superRefine((entry, ctx) => {
+          const message = allowlistEntryError(entry);
+          if (message) ctx.addIssue({ code: 'custom', message });
+        }),
+      )
+      .min(1),
     ceilings: ConstraintsSchema,
     node_daily_spend_usd: z.number().positive(),
     max_goal_bytes: z.number().int().positive().default(32_768),

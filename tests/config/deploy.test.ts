@@ -99,6 +99,17 @@ describe('loadDeployConfig', () => {
     expect(() => loadDeployConfig(writeConfig({ bearer_token: 'oops' }), env)).toThrow(/bearer_token/);
   });
 
+  it('accepts a repo_allowlist entry ending in a /* wildcard', () => {
+    const cfg = loadDeployConfig(writeConfig({ repo_allowlist: ['https://github.com/example/*'] }), env);
+    expect(cfg.repoAllowlist).toEqual(['https://github.com/example/*']);
+  });
+
+  it('rejects a repo_allowlist wildcard anywhere but the final /*', () => {
+    expect(() => loadDeployConfig(writeConfig({ repo_allowlist: ['https://github.com/*/x.git'] }), env)).toThrow(
+      /wildcard must be the final/,
+    );
+  });
+
   it('carries an optional extra_system_prompt through to the parsed config', () => {
     const cfg = loadDeployConfig(writeConfig({ extra_system_prompt: 'Always run the test command.' }), env);
     expect(cfg.extraSystemPrompt).toBe('Always run the test command.');
