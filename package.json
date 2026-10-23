@@ -1,6 +1,6 @@
 {
   "name": "axon-runtime",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Distributed worker runtime that dispatches goal-shaped coding jobs to AI agent workers in disposable git worktrees over authenticated SSH tunnels.",
   "license": "MIT",
   "repository": {
