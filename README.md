@@ -80,8 +80,17 @@ placement are in progress.
 ## Worker configuration
 
 The worker reads a JSON deploy config (see `examples/node.json`). All
-byte caps count UTF-8 bytes. One optional field customizes the worker's
-standing instructions:
+byte caps count UTF-8 bytes.
+
+- **`repo_allowlist`** (required, at least one entry) — the repositories a
+  job may name. An entry is an exact clone URL, compared as a string, or a
+  prefix ending in `/*` that admits every repository directly under it:
+  `https://github.com/your-org/*` allows `https://github.com/your-org/api.git`
+  but not another owner, a nested path, or a name starting with `.` or `-`.
+  A `*` anywhere else is a config error. A wildcard grants nothing by itself;
+  the worker's git credentials still decide what it can clone.
+
+One optional field customizes the worker's standing instructions:
 
 - **`extra_system_prompt`** (optional string, ≤ 16,384 UTF-8 bytes,
   must not be empty or whitespace-only) — appended after the built-in

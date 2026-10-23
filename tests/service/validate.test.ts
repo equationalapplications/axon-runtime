@@ -55,6 +55,16 @@ describe('validateJob', () => {
     expect(reasonOf({ ...base, repo: 'git@github.com:someone/else.git' })).toBe('repo_not_allowlisted');
   });
 
+  it('admits any repository under a wildcard entry, and nothing beside it', () => {
+    const wild = { ...cfg, repoAllowlist: ['https://github.com/example/*'] };
+    expect(validateJob({ ...base, repo: 'https://github.com/example/other.git' }, wild).repo).toBe(
+      'https://github.com/example/other.git',
+    );
+    expect(() => validateJob({ ...base, repo: 'https://github.com/example/a/b.git' }, wild)).toThrow(
+      /repo not allowlisted/,
+    );
+  });
+
   it('rejects an oversized goal', () => {
     expect(reasonOf({ ...base, goal: 'x'.repeat(33) })).toBe('limit_exceeded');
   });
