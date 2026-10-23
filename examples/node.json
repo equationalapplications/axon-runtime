@@ -6,6 +6,7 @@
   "repo_allowlist": ["git@github.com:your-org/your-repo.git"],
   "ceilings": { "max_harness_steps": 40, "timeout_seconds": 1800, "max_spend_usd": 2 },
   "node_daily_spend_usd": 20,
+  "extra_system_prompt": "Always run the project's test command before summarizing.",
   "endpoint": {
     "base_url": "https://openrouter.ai/api/v1",
     "model": "deepseek/deepseek-chat",

@@ -34,6 +34,7 @@ export class LocalExecutor implements Executor {
     let breachedCap = false;
     const adapter = new HarnessAdapter({
       endpoint: this.cfg.endpoint,
+      extraSystemPrompt: this.cfg.extraSystemPrompt,
       fetchImpl: this.deps.fetchImpl,
       onStep: (step, costUsd) => {
         this.deps.onStep?.(job.job_id, step, costUsd);

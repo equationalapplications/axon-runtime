@@ -19,6 +19,15 @@ const FileSchema = z
     max_context_bytes: z.number().int().positive().default(1_048_576),
     max_inline_patch_bytes: z.number().int().positive().default(1_048_576),
     artifact_ttl_days: z.number().int().positive().default(7),
+    /** Operator-owned addendum appended to the built-in worker system prompt. */
+    extra_system_prompt: z
+      .string()
+      .refine((s) => s.trim().length > 0, 'extra_system_prompt must not be empty or whitespace-only')
+      .refine(
+        (s) => Buffer.byteLength(s, 'utf8') <= 16_384,
+        'extra_system_prompt exceeds 16,384 UTF-8 bytes',
+      )
+      .optional(),
     endpoint: z
       .object({
         base_url: z.string().url(),
@@ -43,6 +52,7 @@ export interface DeployConfig {
   maxContextBytes: number;
   maxInlinePatchBytes: number;
   artifactTtlDays: number;
+  extraSystemPrompt?: string;
   endpoint: {
     baseUrl: string;
     model: string;
@@ -73,6 +83,7 @@ export function loadDeployConfig(path: string, env: NodeJS.ProcessEnv): DeployCo
     maxContextBytes: parsed.max_context_bytes,
     maxInlinePatchBytes: parsed.max_inline_patch_bytes,
     artifactTtlDays: parsed.artifact_ttl_days,
+    extraSystemPrompt: parsed.extra_system_prompt,
     endpoint: {
       baseUrl: parsed.endpoint.base_url,
       model: parsed.endpoint.model,

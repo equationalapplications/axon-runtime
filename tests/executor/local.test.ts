@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LocalExecutor } from '../../src/executor/local.js';
+import { SYSTEM_PROMPT } from '../../src/harness/adapter.js';
 import type { DeployConfig } from '../../src/config/deploy.js';
 import { CONTRACT_VERSION, type JobRequest } from '../../src/contract/schema.js';
 
@@ -139,6 +140,25 @@ describe('LocalExecutor', () => {
     const ws = await ex.prepare(capped);
     const result = await ex.run(ws, capped, new AbortController().signal);
     expect(result.patch).toContain('WIP.md');
+    await ex.teardown(ws);
+  });
+
+  it('passes the config extra system prompt through to the harness system message', async () => {
+    const captured: Array<{ messages: Array<{ role: string; content: string | null }> }> = [];
+    const fetchImpl = vi.fn(async (_url: unknown, init: unknown) => {
+      captured.push(JSON.parse((init as RequestInit).body as string));
+      return new Response(JSON.stringify(done('ok')), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as unknown as typeof fetch;
+    const ex = new LocalExecutor({ ...cfg(), extraSystemPrompt: 'OPERATOR RULE' }, { fetchImpl });
+    const ws = await ex.prepare(job());
+    await ex.run(ws, job(), new AbortController().signal);
+    expect(captured[0]!.messages[0]).toEqual({
+      role: 'system',
+      content: SYSTEM_PROMPT + '\n\nOPERATOR RULE',
+    });
     await ex.teardown(ws);
   });
 });

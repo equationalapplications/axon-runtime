@@ -98,4 +98,48 @@ describe('loadDeployConfig', () => {
   it('rejects a config carrying an inline secret value', () => {
     expect(() => loadDeployConfig(writeConfig({ bearer_token: 'oops' }), env)).toThrow(/bearer_token/);
   });
+
+  it('carries an optional extra_system_prompt through to the parsed config', () => {
+    const cfg = loadDeployConfig(writeConfig({ extra_system_prompt: 'Always run the test command.' }), env);
+    expect(cfg.extraSystemPrompt).toBe('Always run the test command.');
+  });
+
+  it('leaves extraSystemPrompt undefined when the field is absent', () => {
+    const cfg = loadDeployConfig(writeConfig(), env);
+    expect(cfg.extraSystemPrompt).toBeUndefined();
+  });
+
+  it('rejects an empty or whitespace-only extra_system_prompt', () => {
+    expect(() => loadDeployConfig(writeConfig({ extra_system_prompt: '' }), env)).toThrow();
+    expect(() => loadDeployConfig(writeConfig({ extra_system_prompt: '\n' }), env)).toThrow();
+    expect(() => loadDeployConfig(writeConfig({ extra_system_prompt: '   ' }), env)).toThrow();
+  });
+
+  it('rejects an extra_system_prompt over 16,384 UTF-8 bytes', () => {
+    expect(() =>
+      loadDeployConfig(writeConfig({ extra_system_prompt: 'a'.repeat(16_385) }), env),
+    ).toThrow();
+    expect(() =>
+      loadDeployConfig(writeConfig({ extra_system_prompt: '字'.repeat(5_462) }), env), // 16,386 bytes
+    ).toThrow();
+  });
+
+  it('accepts an extra_system_prompt at the 16,384-byte boundary', () => {
+    const multiByte = loadDeployConfig(
+      writeConfig({ extra_system_prompt: '字'.repeat(5_461) }), // 16,383 bytes
+      env,
+    );
+    expect(multiByte.extraSystemPrompt).toHaveLength(5_461);
+    const exact = loadDeployConfig(
+      writeConfig({ extra_system_prompt: 'a'.repeat(16_384) }), // exactly 16,384 bytes
+      env,
+    );
+    expect(exact.extraSystemPrompt).toHaveLength(16_384);
+  });
+
+  it('rejects an extra_system_prompt of the wrong type (AC3)', () => {
+    expect(() => loadDeployConfig(writeConfig({ extra_system_prompt: 42 }), env)).toThrow();
+    expect(() => loadDeployConfig(writeConfig({ extra_system_prompt: ['x'] }), env)).toThrow();
+    expect(() => loadDeployConfig(writeConfig({ extra_system_prompt: true }), env)).toThrow();
+  });
 });

@@ -77,6 +77,20 @@ placement are in progress.
 - **OS containment is left to the deployment.** Run the worker as a
   dedicated, non-login OS user.
 
+## Worker configuration
+
+The worker reads a JSON deploy config (see `examples/node.json`). All
+byte caps count UTF-8 bytes. One optional field customizes the worker's
+standing instructions:
+
+- **`extra_system_prompt`** (optional string, ≤ 16,384 UTF-8 bytes,
+  must not be empty or whitespace-only) — appended after the built-in
+  worker system prompt. Use it for deployment-specific standing rules
+  (output conventions, house rules, pointers to operator-provided tooling).
+  The wording is never logged: startup prints only presence and byte
+  count. Job submitters cannot set or override it — it is operator-owned
+  and applies to every job on the node.
+
 ## Quick start
 
 Requires Node.js 22+ and git.
