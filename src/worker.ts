@@ -1,7 +1,7 @@
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
-import { loadDeployConfig } from './config/deploy.js';
+import { loadDeployConfig, type DeployConfig } from './config/deploy.js';
 import { FakeExecutor } from './executor/fake.js';
 import { LocalExecutor } from './executor/local.js';
 import { BudgetGuard } from './harness/budget.js';
@@ -13,8 +13,19 @@ import { JobStore } from './state/store.js';
 
 export const RUNTIME_VERSION = '0.1.0';
 
+/**
+ * Startup-log descriptor for the optional system-prompt addendum:
+ * presence + byte count only, never the configured wording.
+ */
+export function describeExtraSystemPrompt(cfg: Pick<DeployConfig, 'extraSystemPrompt'>): string {
+  return cfg.extraSystemPrompt
+    ? `set (${Buffer.byteLength(cfg.extraSystemPrompt, 'utf8')} bytes)`
+    : 'unset';
+}
+
 export async function startWorker(configPath: string, port = 8787): Promise<FastifyInstance> {
   const cfg = loadDeployConfig(configPath, process.env);
+  console.log(`extra_system_prompt: ${describeExtraSystemPrompt(cfg)}`);
   for (const sub of ['workspaces', 'artifacts', 'cache', 'state']) {
     mkdirSync(join(cfg.home, sub), { recursive: true });
   }

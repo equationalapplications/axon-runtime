@@ -68,7 +68,8 @@ function parseRetryAfter(header: string | null | undefined, now: number): number
   return ms > 0 ? ms : null;
 }
 
-const SYSTEM_PROMPT = [
+/** Built-in worker system prompt. Deployments may append via DeployConfig.extraSystemPrompt. */
+export const SYSTEM_PROMPT = [
   'You are an Axon subagent working inside a disposable git worktree.',
   'Make the requested change by running shell commands with the run_shell tool.',
   'You have no push access; your work is returned as a diff of the worktree.',
@@ -81,9 +82,11 @@ export class HarnessAdapter {
   private readonly onStep?: (step: number, costUsd: number) => void;
   private readonly requestTimeoutMs: number;
   private readonly maxRetries: number;
+  private readonly systemContent: string;
 
   constructor(opts: {
     endpoint: DeployConfig['endpoint'];
+    extraSystemPrompt?: string;
     fetchImpl?: typeof fetch;
     onStep?: (step: number, costUsd: number) => void;
   }) {
@@ -92,11 +95,17 @@ export class HarnessAdapter {
     this.onStep = opts.onStep;
     this.requestTimeoutMs = opts.endpoint.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
     this.maxRetries = opts.endpoint.maxRetries ?? DEFAULT_MAX_RETRIES;
+    // Built once per adapter; the composed system message still rides in
+    // every request body like the rest of `messages` (code hygiene, not a
+    // token saving — see the system-prompt extension spec §Design).
+    this.systemContent = opts.extraSystemPrompt
+      ? `${SYSTEM_PROMPT}\n\n${opts.extraSystemPrompt}`
+      : SYSTEM_PROMPT;
   }
 
   async run(ws: Workspace, job: JobRequest, signal: AbortSignal): Promise<HarnessOutcome> {
     const messages: ChatMessage[] = [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: this.systemContent },
       { role: 'user', content: this.userPrompt(job) },
     ];
 

@@ -2,7 +2,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { HarnessAdapter } from '../../src/harness/adapter.js';
+import { SYSTEM_PROMPT, HarnessAdapter } from '../../src/harness/adapter.js';
 import { CONTRACT_VERSION, type JobRequest } from '../../src/contract/schema.js';
 import type { Workspace } from '../../src/executor/types.js';
 
@@ -533,5 +533,63 @@ describe('HarnessAdapter retry + per-request timeout (spec #8)', () => {
     expect(outcome.summary).toBe('recovered');
     expect(outcome.steps).toBe(1);
     expect(fetchImpl).toHaveBeenCalledTimes(3); // shape-error + null body + success
+  });
+});
+
+describe('HarnessAdapter extra system prompt', () => {
+  /** Fetch stub that captures each request body and answers with a canned stop response. */
+  function capturingFetch(captured: unknown[]): typeof fetch {
+    return vi.fn(async (_url: unknown, init: unknown) => {
+      captured.push(JSON.parse((init as RequestInit).body as string));
+      return new Response(JSON.stringify(assistantDone('done')), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as unknown as typeof fetch;
+  }
+
+  it('appends the extra system prompt to the built-in prompt exactly once per request', async () => {
+    const captured: Array<{ messages: Array<{ role: string; content: string | null }> }> = [];
+    const adapter = new HarnessAdapter({
+      endpoint,
+      extraSystemPrompt: 'Always run the test command.',
+      fetchImpl: capturingFetch(captured),
+    });
+    await adapter.run(ws(), job(), new AbortController().signal);
+    expect(captured).toHaveLength(1);
+    expect(captured[0]!.messages[0]).toEqual({
+      role: 'system',
+      content: SYSTEM_PROMPT + '\n\nAlways run the test command.',
+    });
+  });
+
+  it('keeps the exact built-in system message when no extra prompt is configured', async () => {
+    const captured: Array<{ messages: Array<{ role: string; content: string | null }> }> = [];
+    const adapter = new HarnessAdapter({ endpoint, fetchImpl: capturingFetch(captured) });
+    await adapter.run(ws(), job(), new AbortController().signal);
+    expect(captured[0]!.messages[0]).toEqual({ role: 'system', content: SYSTEM_PROMPT });
+  });
+
+  it('sends the same system message on every request of a multi-step job', async () => {
+    const captured: Array<{ messages: Array<{ role: string; content: string | null }> }> = [];
+    let i = 0;
+    const fetchImpl = vi.fn(async (_url: unknown, init: unknown) => {
+      captured.push(JSON.parse((init as RequestInit).body as string));
+      const body = i++ === 0 ? assistantToolCall('true') : assistantDone('done');
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as unknown as typeof fetch;
+    const adapter = new HarnessAdapter({
+      endpoint,
+      extraSystemPrompt: 'HOUSE RULE',
+      fetchImpl,
+    });
+    await adapter.run(ws(), job(), new AbortController().signal);
+    expect(captured.length).toBeGreaterThanOrEqual(2);
+    for (const body of captured) {
+      expect(body.messages[0]).toEqual({ role: 'system', content: SYSTEM_PROMPT + '\n\nHOUSE RULE' });
+    }
   });
 });

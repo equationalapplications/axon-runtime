@@ -91,7 +91,7 @@ job it submits.
 ### Option 2 — generic system-prompt extension in DeployConfig (chosen)
 
 Add an optional operator-owned config field, e.g.
-`extra_system_prompt: string (1..16384 chars, optional)`, appended to the
+`extra_system_prompt: string (1..16384 UTF-8 bytes, optional)`, appended to the
 built-in `SYSTEM_PROMPT` at adapter construction.
 
 - ✅ Generic: no CT references; any deployment can append standing
