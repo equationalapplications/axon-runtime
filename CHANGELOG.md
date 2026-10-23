@@ -1,3 +1,9 @@
+## [1.2.0](https://github.com/equationalapplications/axon-runtime/compare/v1.1.0...v1.2.0) (2026-10-23)
+
+### Features
+
+* **harness:** operator-owned extra_system_prompt — generic worker system-prompt extension ([c29c251](https://github.com/equationalapplications/axon-runtime/commit/c29c2510342445cb80ce948eb497e05cadae620e))
+
 ## [1.1.0](https://github.com/equationalapplications/axon-runtime/compare/v1.0.0...v1.1.0) (2026-09-26)
 
 ### Features
