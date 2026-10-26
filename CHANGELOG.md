@@ -1,3 +1,9 @@
+## [1.3.1](https://github.com/equationalapplications/axon-runtime/compare/v1.3.0...v1.3.1) (2026-10-26)
+
+### Bug Fixes
+
+* **worker:** derive RUNTIME_VERSION from package.json (issue [#31](https://github.com/equationalapplications/axon-runtime/issues/31)) ([0f0f0ce](https://github.com/equationalapplications/axon-runtime/commit/0f0f0ce211ad12c739cd075bd48d3bb334e042e0))
+
 ## [1.3.0](https://github.com/equationalapplications/axon-runtime/compare/v1.2.0...v1.3.0) (2026-10-23)
 
 ### Features
