@@ -31,6 +31,7 @@
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
+    "test:dist": "node --input-type=module -e \"const { RUNTIME_VERSION } = await import('./dist/worker.js'); if (RUNTIME_VERSION !== process.env.npm_package_version) { throw new Error('dist worker reports ' + RUNTIME_VERSION + ', expected ' + process.env.npm_package_version); } console.log('dist runtime_version OK:', RUNTIME_VERSION);\"",
     "prepare": "npm run build"
   },
   "dependencies": {

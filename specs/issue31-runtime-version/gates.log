@@ -1,0 +1,37 @@
+=== npm run typecheck ===
+
+> axon-runtime@1.2.0 typecheck
+> tsc --noEmit
+
+typecheck_exit=0
+=== npm test ===
+
+> axon-runtime@1.2.0 test
+> vitest run
+
+
+ RUN  v5.0.3 /home/kv-thinkpad-t420-ubuntu/code/github/equationalapplications/axon-runtime-issue31
+
+
+ Test Files  19 passed (19)
+      Tests  176 passed (176)
+   Start at  20:41:18
+   Duration  22.62s (tests 84%, import 12%, transform 3%, worker 1%)
+
+    Isolate  19 workers spawned · ~240ms startup each (spawn + environment, per file)
+             at least ~1.28s faster with isolate: false — reuses workers across files instead of one per file
+
+test_exit=0
+=== npm run build ===
+
+> axon-runtime@1.2.0 build
+> tsc -p tsconfig.json
+
+build_exit=0
+=== npm run test:dist ===
+
+> axon-runtime@1.2.0 test:dist
+> node --input-type=module -e "const { RUNTIME_VERSION } = await import('./dist/worker.js'); if (RUNTIME_VERSION !== process.env.npm_package_version) { throw new Error('dist worker reports ' + RUNTIME_VERSION + ', expected ' + process.env.npm_package_version); } console.log('dist runtime_version OK:', RUNTIME_VERSION);"
+
+dist runtime_version OK: 1.2.0
+test_dist_exit=0

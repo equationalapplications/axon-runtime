@@ -1,3 +1,4 @@
+import { createRequire } from 'node:module';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
@@ -11,7 +12,22 @@ import { buildServer } from './service/server.js';
 import { sweepOnStartup } from './service/sweep.js';
 import { JobStore } from './state/store.js';
 
-export const RUNTIME_VERSION = '0.1.0';
+const requireJson = createRequire(import.meta.url);
+
+export const RUNTIME_VERSION: string = (() => {
+  try {
+    return (requireJson('../package.json') as { version: string }).version;
+  } catch (err) {
+    // Fail-fast with a signature that names the actual requirement — the raw
+    // createRequire failure is a nondescript `Cannot find module '../package.json'`
+    // (MODULE_NOT_FOUND) that an operator cannot connect to deployment layout.
+    throw new Error(
+      'axon-runtime: cannot determine runtime version — package.json must sit exactly ' +
+        'one directory above the compiled worker.js (dist-only deployments must ship package.json)',
+      { cause: err },
+    );
+  }
+})();
 
 /**
  * Startup-log descriptor for the optional system-prompt addendum:
