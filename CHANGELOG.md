@@ -1,3 +1,10 @@
+## [1.3.2](https://github.com/equationalapplications/axon-runtime/compare/v1.3.1...v1.3.2) (2026-11-01)
+
+### Bug Fixes
+
+* **release:** pin conventional-changelog-conventionalcommits ^9.3.1 + dependabot ignore >=10 ([42e8da2](https://github.com/equationalapplications/axon-runtime/commit/42e8da24b9b5c6764cbc3cccb1330ad8bde7a673)), closes [#29](https://github.com/equationalapplications/axon-runtime/issues/29)
+* **worker:** cut 1.3.2 for the vendored-dist version guard ([565c9b7](https://github.com/equationalapplications/axon-runtime/commit/565c9b7310a197cecdad80c53599979d60cef7e5)), closes [#31](https://github.com/equationalapplications/axon-runtime/issues/31) [#42](https://github.com/equationalapplications/axon-runtime/issues/42)
+
 ## [1.3.1](https://github.com/equationalapplications/axon-runtime/compare/v1.3.0...v1.3.1) (2026-10-26)
 
 ### Bug Fixes
