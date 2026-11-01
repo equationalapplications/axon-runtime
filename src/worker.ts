@@ -16,14 +16,21 @@ const requireJson = createRequire(import.meta.url);
 
 export const RUNTIME_VERSION: string = (() => {
   try {
-    return (requireJson('../package.json') as { version: string }).version;
+    const pkg = requireJson('../package.json') as { name: string; version: string };
+    if (pkg.name !== 'axon-runtime') {
+      // Guards the vendored-dist case: `<wrapper>/dist/worker.js` would otherwise
+      // silently report the wrapper's version — the exact bug class this fixes.
+      throw new Error(`found package.json for '${pkg.name}' instead of axon-runtime`);
+    }
+    return pkg.version;
   } catch (err) {
     // Fail-fast with a signature that names the actual requirement — the raw
     // createRequire failure is a nondescript `Cannot find module '../package.json'`
     // (MODULE_NOT_FOUND) that an operator cannot connect to deployment layout.
     throw new Error(
       'axon-runtime: cannot determine runtime version — package.json must sit exactly ' +
-        'one directory above the compiled worker.js (dist-only deployments must ship package.json)',
+        'one directory above the compiled worker.js and name axon-runtime ' +
+        '(dist-only deployments must ship package.json)',
       { cause: err },
     );
   }
