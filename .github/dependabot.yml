@@ -9,3 +9,11 @@ updates:
         update-types:
           - "minor"
           - "patch"
+    ignore:
+      # preset@10 needs conventional-changelog-writer@9, but
+      # commit-analyzer@13 / release-notes-generator@14 pin writer ^8 —
+      # the mismatch breaks the Release workflow's notes generation
+      # (2026-11-01, run 41332005599; same breakage as PR #29).
+      # Revisit when commit-analyzer/release-notes-generator support writer@9.
+      - dependency-name: "conventional-changelog-conventionalcommits"
+        versions: [">=10"]
