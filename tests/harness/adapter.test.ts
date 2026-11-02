@@ -183,6 +183,7 @@ describe('HarnessAdapter', () => {
 describe('HarnessAdapter retry + per-request timeout (spec #8)', () => {
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it('retries a 500 then succeeds: steps reflect ONE step, onStep not called for the failed attempt', async () => {
@@ -485,7 +486,12 @@ describe('HarnessAdapter retry + per-request timeout (spec #8)', () => {
     // CodeRabbit docs:101: on the last attempt the catch would otherwise take
     // the maybeRetry-false path to endpoint_error; the signal check must run
     // before that on EVERY catch, not just the mid-retry ones.
+    // Determinism: backoff is 2/4/8s * (1 ± 20% Math.random jitter), so the
+    // worst case is 14s * 1.2 = 16.8s — longer than the old 16s advance, which
+    // made the 4th attempt not start (flaked CI 2026-11-01). Pin jitter to 1.0
+    // (random = 0.5) so backoffs total exactly 14s, then advance fake time past it.
     vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
     const ac = new AbortController();
     let calls = 0;
     const fetchImpl = vi.fn(async (_url: unknown, init: RequestInit) => {
@@ -499,8 +505,8 @@ describe('HarnessAdapter retry + per-request timeout (spec #8)', () => {
     });
     const adapter = new HarnessAdapter({ endpoint, fetchImpl: fetchImpl as unknown as typeof fetch });
     const run = adapter.run(ws(), job(), ac.signal);
-    // Exhaust 3 attempts + backoffs (worst-case jitter < 15.6s), landing the
-    // final attempt in flight, then cancel mid-flight.
+    // Exhaust 3 attempts + fixed 14s of backoff, landing the final attempt
+    // in flight, then cancel mid-flight.
     await vi.advanceTimersByTimeAsync(16_000);
     expect(fetchImpl).toHaveBeenCalledTimes(4); // final attempt in flight
     ac.abort();
