@@ -214,7 +214,11 @@ naming both versions. Note the drain-first order is the real guard for
 the bump itself — the old client predates the fail-fast error. During a
 lagging-worker window, `contract_unsupported` rejections still leave a
 `dispatched` row in the ledger (the row is written before the rejection
-check) — expected, not a bug.
+check) — expected, not a bug. One caveat when retrying a rejected job
+over raw HTTP with the SAME job_id after upgrading a worker: the worker
+already stores a `rejected` row under that id and will answer
+`accepted` without running anything. Mint a fresh job_id for retries
+(the CLI does this automatically on every dispatch).
 
 ## Development
 

@@ -3,6 +3,9 @@ import { z } from 'zod';
 import { DEFAULT_MAX_GUIDANCE_BYTES, guidanceBytes, validateGuidanceItems } from '../contract/guidance.js';
 import { GuidanceItemSchema, type GuidanceItem } from '../contract/schema.js';
 
+/** Same bound the job contract enforces server-side (GuidanceItemSchema array max). */
+export const MAX_GUIDANCE_ITEMS = 16;
+
 /**
  * Client-side pre-flight for `dispatch --guidance-file`: reads and validates
  * the guidance file BEFORE any network call, raising a clear, named error that
@@ -17,7 +20,7 @@ export function loadGuidanceFile(path: string): GuidanceItem[] {
   } catch (err) {
     throw new Error(`axon: --guidance-file ${path} is not readable JSON: ${(err as Error).message}`);
   }
-  const parsed = z.array(GuidanceItemSchema).safeParse(raw);
+  const parsed = z.array(GuidanceItemSchema).max(MAX_GUIDANCE_ITEMS).safeParse(raw);
   if (!parsed.success) {
     const detail = parsed.error.issues[0]?.message ?? 'invalid payload';
     throw new Error(

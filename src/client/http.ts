@@ -80,6 +80,7 @@ export class AxonClient {
   async status(jobId: string): Promise<Envelope | { status: 'running' }> {
     const res = await this.call(`/jobs/${jobId}`);
     if (res.status === 404) throw new Error(`axon: unknown job ${jobId}`);
+    if (!res.ok) throw new Error(`axon: unexpected ${res.status} fetching job ${jobId}`);
     const body = (await res.json()) as unknown;
     if ((body as { status?: string }).status === 'running') return { status: 'running' };
     try {

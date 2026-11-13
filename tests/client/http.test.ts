@@ -149,4 +149,24 @@ describe('AxonClient contract mismatch handling', () => {
     );
     expect(vi.mocked(fetch).mock.calls.length).toBeGreaterThanOrEqual(5);
   });
+
+  it('wait() keeps retrying a JSON 5xx body (a Fastify default error is NOT a contract mismatch)', async () => {
+    stubFetchSequence([{ status: 500, body: '{"statusCode":500,"error":"Internal Server Error"}' }]);
+    const c = new AxonClient({ baseUrl: 'http://127.0.0.1:1', token: 't' });
+    await expect(c.wait('3f1a6b8e-0000-4000-8000-0000000000f1', { pollMs: 5, timeoutMs: 60 })).rejects.toThrow(
+      /timed out/,
+    );
+    expect(vi.mocked(fetch).mock.calls.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('wait() fails fast on a same-version terminal body that fails schema validation (no lockstep hint)', async () => {
+    stubFetchSequence([
+      { status: 200, body: JSON.stringify({ contract_version: 3, status: 'ok', result: null, bad_field: true }) },
+    ]);
+    const c = new AxonClient({ baseUrl: 'http://127.0.0.1:1', token: 't' });
+    await expect(c.wait('3f1a6b8e-0000-4000-8000-0000000000f1', { pollMs: 5, timeoutMs: 3000 })).rejects.toThrow(
+      /node contract_version 3, client contract_version 3(?!.*lockstep)/s,
+    );
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
 });
