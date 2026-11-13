@@ -119,7 +119,7 @@ describe('AxonClient contract mismatch handling', () => {
     const c = new AxonClient({ baseUrl: 'http://127.0.0.1:1', token: 't' });
     await expect(c.status('3f1a6b8e-0000-4000-8000-0000000000f1')).rejects.toThrow(ContractMismatchError);
     await expect(c.status('3f1a6b8e-0000-4000-8000-0000000000f1')).rejects.toThrow(
-      /node contract_version 2 .* client contract_version 3/s,
+      /node contract_version 2.*client contract_version 3.*upgrade in lockstep/s,
     );
   });
 
