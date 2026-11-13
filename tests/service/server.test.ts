@@ -30,7 +30,7 @@ beforeEach(() => {
     repoAllowlist: ['repo'],
     ceilings: { max_harness_steps: 40, timeout_seconds: 1800, max_spend_usd: 2 },
     nodeDailySpendUsd: 20,
-    maxGoalBytes: 1024, maxContextBytes: 1024, maxInlinePatchBytes: 1024, artifactTtlDays: 7,
+    maxGoalBytes: 1024, maxContextBytes: 1024, maxGuidanceBytes: 1024, maxInlinePatchBytes: 1024, artifactTtlDays: 7,
     endpoint: { baseUrl: 'https://x/v1', model: 'm', apiKey: 'k-env' },
   };
   const store = new JobStore(join(home, 'jobs.db'));

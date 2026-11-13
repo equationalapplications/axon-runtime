@@ -29,7 +29,7 @@ function cfg(): DeployConfig {
     nodeId: 'n1', home, bearerToken: 'tok', maxConcurrentJobs: 2, repoAllowlist: [originRepo],
     ceilings: { max_harness_steps: 40, timeout_seconds: 1800, max_spend_usd: 2 },
     nodeDailySpendUsd: 20,
-    maxGoalBytes: 32_768, maxContextBytes: 1_048_576, maxInlinePatchBytes: 1_048_576, artifactTtlDays: 7,
+    maxGoalBytes: 32_768, maxContextBytes: 1_048_576, maxGuidanceBytes: 3072, maxInlinePatchBytes: 1_048_576, artifactTtlDays: 7,
     endpoint: { baseUrl: 'https://api.example/v1', model: 'm', apiKey: 'test-endpoint-key' },
   };
 }
