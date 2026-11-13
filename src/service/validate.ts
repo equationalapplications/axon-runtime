@@ -36,7 +36,12 @@ export function validateJob(body: unknown, cfg: DeployConfig): JobRequest {
   if (job.guidance !== undefined) {
     const guidanceError = validateGuidanceItems(job.guidance, cfg.maxGuidanceBytes);
     if (guidanceError !== null) {
-      throw new RejectError('limit_exceeded', guidanceError);
+      // Content rules → malformed_payload (raising the byte cap cannot help);
+      // the size cap alone → limit_exceeded, matching goal/context semantics.
+      throw new RejectError(
+        guidanceError.kind === 'over-cap' ? 'limit_exceeded' : 'malformed_payload',
+        guidanceError.message,
+      );
     }
   }
 

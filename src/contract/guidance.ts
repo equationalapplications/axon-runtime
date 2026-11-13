@@ -27,21 +27,35 @@ export function renderGuidance(items: GuidanceItem[] | undefined): string {
 
 /**
  * Validator-level guidance rules shared by the worker and the client CLI.
- * Returns a specific error message on the first violation, or null when clean.
+ * Content-rule violations (delimiter/boundary injection) are `malformed` —
+ * the payload is well-shaped but violates the guidance contract; size
+ * violations are `over-cap`. Returns null when clean.
  */
-export function validateGuidanceItems(items: GuidanceItem[], capBytes: number): string | null {
+export function validateGuidanceItems(
+  items: GuidanceItem[],
+  capBytes: number,
+): { kind: 'malformed' | 'over-cap'; message: string } | null {
   for (const [i, it] of items.entries()) {
     const where = it.label !== undefined ? `guidance item ${i} ("${it.label}")` : `guidance item ${i}`;
     if (it.text.includes(GUIDANCE_END_LINE)) {
-      return `${where}: text must not contain the closing-delimiter line "${GUIDANCE_END_LINE}"`;
+      return {
+        kind: 'malformed',
+        message: `${where}: text must not contain the closing-delimiter line "${GUIDANCE_END_LINE}"`,
+      };
     }
     if (it.text.split('\n').some((line) => line.startsWith('- '))) {
-      return `${where}: no text line may begin with "- " (it would forge a guidance item boundary)`;
+      return {
+        kind: 'malformed',
+        message: `${where}: no text line may begin with "- " (it would forge a guidance item boundary)`,
+      };
     }
   }
   const bytes = guidanceBytes(items);
   if (bytes > capBytes) {
-    return `guidance exceeds ${capBytes} bytes (${bytes} bytes of raw label+text)`;
+    return {
+      kind: 'over-cap',
+      message: `guidance exceeds ${capBytes} bytes (${bytes} bytes of raw label+text)`,
+    };
   }
   return null;
 }

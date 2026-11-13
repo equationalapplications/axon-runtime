@@ -105,6 +105,12 @@ dispatch step is downstream and out of scope here.
   gateway 5xx throwing in `res.json()` must keep retrying; 5xx-retry test added);
   D9 discoverability via CLI-side pre-validation of `--guidance-file` against
   `GuidanceItemSchema` + README documentation of the no-leading-`- ` rule.
-  Next: OWNER APPROVAL (Kurt), then implementation on this PR.
+  Implementation ladder clarification (haiku medium rung, adopted): guidance
+  CONTENT-rule violations (delimiter / `- ` boundary injection) reject with
+  `malformed_payload` — raising the byte cap cannot help an operator — while the
+  byte cap alone rejects with `limit_exceeded` (D6 unchanged; this refines the
+  validate.ts scope line above).
+  Next: OWNER APPROVAL (Kurt) — RECEIVED 2026-11-13; implementation merged into
+  this PR and under review.
 - Merge gate: Kurt's spec approval. The PR stays DRAFT until implementation is under
   way; nothing merges without his go.
