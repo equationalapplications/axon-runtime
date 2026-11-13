@@ -40,8 +40,11 @@ came from, and this runtime stays neutral about that source.
 job contract or a documented context-file convention, where in the prompt
 it sits, and what happens when it is over the cap.
 
-*Why first:* it works with the harness as it is, and it changes nothing
-in the security model.
+*Why first:* it works with the harness as it is. It is not expected to change
+the security model, but the spec confirms that before any code: when the step
+lands, the README's bounded-input list (goal, context, inline patch) gains an
+entry for the guidance cap, and the spec says how a dispatcher-attached block
+relates to the operator-owned `extra_system_prompt` rule.
 
 ## Step 2 — Guidance delivered while the job runs — PLANNED
 
