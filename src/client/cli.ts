@@ -2,6 +2,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { Command } from 'commander';
 import { AxonClient, newJobId } from './http.js';
+import { loadGuidanceFile } from './guidance-file.js';
 import { Ledger } from '../controller/ledger.js';
 import { CONTRACT_VERSION, type JobRequest } from '../contract/schema.js';
 
@@ -41,9 +42,11 @@ program
   .option('--max-steps <n>', 'harness step cap', '40')
   .option('--timeout <seconds>', 'wall clock cap', '1800')
   .option('--max-spend <usd>', 'per-job spend cap', '2')
+  .option('--guidance-file <path>', 'JSON file of standing guidance items [{ label?, text }]', undefined)
   .option('--wait', 'poll until the job reaches a terminal status', false)
   .action(async (opts) => {
     const globals = program.opts();
+    const guidance = opts.guidanceFile ? loadGuidanceFile(opts.guidanceFile) : undefined;
     const { client } = clientFor(opts.node, globals.nodes);
     const job: JobRequest = {
       contract_version: CONTRACT_VERSION,
@@ -58,6 +61,7 @@ program
         max_spend_usd: Number(opts.maxSpend),
       },
       output: opts.output,
+      ...(guidance !== undefined ? { guidance } : {}),
     };
     const submitted = await client.dispatch(job);
     const ledger = new Ledger(globals.ledger);
