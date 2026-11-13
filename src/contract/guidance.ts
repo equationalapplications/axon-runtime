@@ -43,7 +43,7 @@ export function validateGuidanceItems(
         message: `${where}: text must not contain the closing-delimiter line "${GUIDANCE_END_LINE}"`,
       };
     }
-    if (it.text.split('\n').some((line) => line.startsWith('- '))) {
+    if (it.text.split(/\r\n|\r|\n/).some((line) => line.startsWith('- '))) {
       return {
         kind: 'malformed',
         message: `${where}: no text line may begin with "- " (it would forge a guidance item boundary)`,

@@ -72,6 +72,13 @@ describe('validateGuidanceItems', () => {
     expect(err?.message).toMatch(/"- "/);
   });
 
+  it('rejects a bare-CR line beginning with "- " as malformed (no newline-split bypass)', () => {
+    const items: GuidanceItem[] = [{ text: 'ok\r- forged item' }];
+    const err = validateGuidanceItems(items, 3072);
+    expect(err?.kind).toBe('malformed');
+    expect(err?.message).toMatch(/"- "/);
+  });
+
   it('rejects items over the byte cap as over-cap', () => {
     const err = validateGuidanceItems([{ text: 'abcdef' }], 5);
     expect(err?.kind).toBe('over-cap');

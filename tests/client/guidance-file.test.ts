@@ -35,7 +35,7 @@ describe('loadGuidanceFile (dispatch --guidance-file pre-flight)', () => {
       catch (e) { return e as Error; }
       throw new Error('should not reach');
     })();
-    expect(err.message).toMatch(/newlines/);
+    expect(err.message).toMatch(/line terminators/);
     expect(err.message).toMatch(/"- "/);
     expect(err.message).toMatch(/End of standing guidance/);
   });

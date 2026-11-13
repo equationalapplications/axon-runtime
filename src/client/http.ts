@@ -13,13 +13,21 @@ export class ContractMismatchError extends Error {
   readonly nodeContractVersion: unknown;
   readonly clientContractVersion: number;
 
-  constructor(nodeContractVersion: unknown, clientContractVersion: number) {
+  constructor(nodeContractVersion: unknown, clientContractVersion: number, options?: { cause?: unknown }) {
+    const firstIssue =
+      options?.cause instanceof Error && 'issues' in options.cause
+        ? ` (first issue: ${String(
+            (options.cause as { issues: { message?: unknown }[] }).issues[0]?.message ?? 'unavailable',
+          )})`
+        : '';
     super(
-      `axon: node terminal envelope failed validation ` +
-        `(node contract_version ${String(nodeContractVersion)}, client contract_version ${clientContractVersion})` +
+      `axon: node terminal envelope failed validation` +
+        ` (node contract_version ${String(nodeContractVersion)}, client contract_version ${clientContractVersion})` +
         (nodeContractVersion !== clientContractVersion
           ? '; if the node is running an older contract, upgrade in lockstep (drain, then workers, then controller)'
-          : ''),
+          : '') +
+        firstIssue,
+      options?.cause !== undefined ? { cause: options.cause } : undefined,
     );
     this.name = 'ContractMismatchError';
     this.nodeContractVersion = nodeContractVersion;
@@ -76,10 +84,11 @@ export class AxonClient {
     if ((body as { status?: string }).status === 'running') return { status: 'running' };
     try {
       return EnvelopeSchema.parse(body);
-    } catch {
+    } catch (err) {
       throw new ContractMismatchError(
         (body as { contract_version?: unknown } | null)?.contract_version,
         CONTRACT_VERSION,
+        { cause: err },
       );
     }
   }

@@ -1,7 +1,7 @@
 # Spec — a guidance block the worker is shown word for word
 
 **Date:** 2026-11-13
-**Status:** DRAFT — SPEC LADDER COMPLETE, awaiting owner approval. Opus spec delta APPROVE WITH NITS ($0.25, folded) → Tier-4 Fable spec gate REQUEST CHANGES ($2.11, cap $3; M1 + m1–m5, ALL folded) → down-ladder Opus delta APPROVE WITH NITS ($0.18, no BLOCKER/MAJOR; 5xx-retry + discoverability minors folded). Merge gate: Kurt.
+**Status:** APPROVED by owner 2026-11-13; implementation on this same PR, in review (spec ladder complete — see trail below)
 **Branch:** `feat/issue50-guidance-in-job`
 **Issue:** equationalapplications/axon-runtime#50
 **Backbone:** [investigation.md](./investigation.md) (Step 0 converged: Opus $0.54 RC → all findings folded → Fable $2.12 RC → all findings verified and folded; 0 open BLOCKER/MAJOR)

@@ -41,7 +41,7 @@ export const GuidanceItemSchema = z
     label: z
       .string()
       .min(1)
-      .refine((s) => !s.includes('\n'), 'guidance label must not contain newlines')
+      .refine((s) => !s.includes('\n') && !s.includes('\r'), 'guidance label must not contain line terminators')
       .optional(),
     /** Verbatim guidance text; may span multiple lines, must not be blank. */
     text: z

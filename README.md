@@ -204,8 +204,17 @@ axon dispatch --node n1 --repo … --goal-file goal.md --guidance-file guidance.
 
 `CONTRACT_VERSION` bumps are not backward compatible. Upgrade in order:
 **drain running jobs, then upgrade workers, then upgrade the controller**
-(dispatcher). A client talking to an out-of-date node fails fast with a
-typed `ContractMismatchError` naming both versions.
+(dispatcher). Before dispatching, check each node's version via
+`GET /nodeinfo` (`contract_version` field) and hold dispatch to any node
+that still runs the older contract. What a mismatch looks like at
+runtime: `dispatch` to an old worker returns a `contract_unsupported`
+rejection (printed, exit 1); `status`/`wait` against an out-of-date
+node's terminal envelope fails fast with a typed `ContractMismatchError`
+naming both versions. Note the drain-first order is the real guard for
+the bump itself — the old client predates the fail-fast error. During a
+lagging-worker window, `contract_unsupported` rejections still leave a
+`dispatched` row in the ledger (the row is written before the rejection
+check) — expected, not a bug.
 
 ## Development
 
