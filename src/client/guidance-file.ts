@@ -25,7 +25,7 @@ export function loadGuidanceFile(path: string): GuidanceItem[] {
     throw new Error(
       `axon: --guidance-file ${path} is not a valid guidance file. ` +
         'Expected an array of items shaped { label?, text } where label is a non-empty ' +
-        'single-line string and text is non-empty, not whitespace-only, and multi-line is allowed. ' +
+        'single-line string without "]" and text is non-empty, not whitespace-only, and multi-line is allowed. ' +
         `Content rules: no text line may begin with "- " and no text may contain the ` +
         `closing-delimiter line "=== End of standing guidance ===". ` +
         `First schema error: ${detail}`,

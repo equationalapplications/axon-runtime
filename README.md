@@ -188,8 +188,9 @@ Standing guidance (verbatim, from the dispatcher):
 Rules (enforced by the worker validator and by the client's
 `--guidance-file` pre-flight):
 
-- `label` is optional, non-empty, single-line; `text` is non-empty, not
-  whitespace-only, and may span multiple lines (rendered byte-for-byte).
+- `label` is optional, non-empty, single-line (no `]` — it would forge the
+  rendered heading's end); `text` is non-empty, not whitespace-only, and may
+  span multiple lines (rendered byte-for-byte).
 - No text line may begin with `- ` (it would forge an item boundary).
 - No text may contain the closing-delimiter line
   `=== End of standing guidance ===`.
