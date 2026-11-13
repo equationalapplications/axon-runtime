@@ -1,3 +1,22 @@
+## [1.4.0](https://github.com/equationalapplications/axon-runtime/compare/v1.3.2...v1.4.0) (2026-11-13)
+
+### Features
+
+* **cli:** add dispatch --guidance-file with client-side pre-flight validation ([0eed3d0](https://github.com/equationalapplications/axon-runtime/commit/0eed3d0dc2f7127e15c9df660a6670d6bfd57969))
+* **client:** typed ContractMismatchError on terminal-envelope parse failure ([d4d2cdb](https://github.com/equationalapplications/axon-runtime/commit/d4d2cdbf6fc1d27576189c617d07ca88340ab343))
+* **config:** add max_guidance_bytes (default 3072) to deploy config ([db9b8cc](https://github.com/equationalapplications/axon-runtime/commit/db9b8cc7fc760d3ba654f9b8f19d7926358fb4eb))
+* **contract:** pin contract version 3 with optional guidance items ([9fe7249](https://github.com/equationalapplications/axon-runtime/commit/9fe72498d0b10ffe4e49fe1e9fe7e99a24e068bd))
+* **harness:** render guidance verbatim between goal and context in user prompt ([f403137](https://github.com/equationalapplications/axon-runtime/commit/f403137301fbf2545fb670d729d9a382da454caa))
+* **service:** enforce guidance rules and byte cap in validateJob ([5b76c2a](https://github.com/equationalapplications/axon-runtime/commit/5b76c2af331c74b4474a021f36db54a4f33674fc))
+
+### Bug Fixes
+
+* **age-gate:** fail closed — resolved/integrity deltas, null/unparsable registry data ([b9da065](https://github.com/equationalapplications/axon-runtime/commit/b9da065385997804702db33f9c4f7703006ac507))
+* empty guidance file sends absent key (never []); drop timing-sensitive poll-count assertions ([3f7bd08](https://github.com/equationalapplications/axon-runtime/commit/3f7bd08026ca49b1f41b8c020fe5de9387248a1e))
+* guidance content-rule violations reject malformed_payload, cap stays limit_exceeded ([d2803bf](https://github.com/equationalapplications/axon-runtime/commit/d2803bfb8c40ecdce34c1d641d2b8601a1a6a898))
+* haiku-high rung minors — README rollout wording, Zod cause chain, tested job builder, CR boundary ([8a2d065](https://github.com/equationalapplications/axon-runtime/commit/8a2d065d997f06b20b7ac1878d037f57ca8c7edb))
+* non-2xx JSON bodies retry instead of aborting wait() as contract mismatch; pre-flight caps items at 16 ([53a546c](https://github.com/equationalapplications/axon-runtime/commit/53a546c1d76ec8d341f7f8ee81113a66163ea2f7))
+
 ## [1.3.2](https://github.com/equationalapplications/axon-runtime/compare/v1.3.1...v1.3.2) (2026-11-01)
 
 ### Bug Fixes
