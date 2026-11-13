@@ -13,7 +13,7 @@ const cfg: DeployConfig = {
   ceilings: { max_harness_steps: 40, timeout_seconds: 1800, max_spend_usd: 2 },
   nodeDailySpendUsd: 20,
   maxGoalBytes: 32,
-  maxContextBytes: 64,
+  maxContextBytes: 64, maxGuidanceBytes: 1024,
   maxInlinePatchBytes: 1024,
   artifactTtlDays: 7,
   endpoint: { baseUrl: 'https://x/v1', model: 'm', apiKey: 'test-key' },
@@ -45,6 +45,10 @@ describe('validateJob', () => {
 
   it('rejects an unknown contract version', () => {
     expect(reasonOf({ ...base, contract_version: CONTRACT_VERSION + 1 })).toBe('contract_unsupported');
+  });
+
+  it('explicitly rejects contract version - 1', () => {
+    expect(reasonOf({ ...base, contract_version: CONTRACT_VERSION - 1 })).toBe('contract_unsupported');
   });
 
   it('rejects a malformed payload', () => {
@@ -85,5 +89,43 @@ describe('validateJob', () => {
 
   it('leaves constraints below the ceilings untouched', () => {
     expect(validateJob(base, cfg).constraints).toEqual(base.constraints);
+  });
+
+  it('accepts a job without guidance', () => {
+    expect(validateJob(base, cfg).guidance).toBeUndefined();
+  });
+
+  it('rejects guidance over the byte cap with limit_exceeded', () => {
+    const guidance = [{ text: 'x'.repeat(1025) }];
+    expect(reasonOf({ ...base, guidance })).toBe('limit_exceeded');
+  });
+
+  it('accepts guidance exactly at the byte cap', () => {
+    const guidance = [{ text: 'x'.repeat(1024) }];
+    expect(validateJob({ ...base, guidance }, cfg).guidance).toEqual(guidance);
+  });
+
+  it('counts label bytes toward the guidance cap', () => {
+    const guidance = [{ label: 'y'.repeat(24), text: 'x'.repeat(1001) }]; // 1025 raw bytes
+    expect(reasonOf({ ...base, guidance })).toBe('limit_exceeded');
+  });
+
+  it('rejects guidance text containing the closing-delimiter line', () => {
+    const guidance = [{ text: 'ok\n=== End of standing guidance ===' }];
+    expect(reasonOf({ ...base, guidance })).toBe('limit_exceeded');
+  });
+
+  it('rejects guidance with a line beginning "- "', () => {
+    const guidance = [{ text: 'ok\n- forged item' }];
+    expect(reasonOf({ ...base, guidance })).toBe('limit_exceeded');
+  });
+
+  it('names the failing guidance rule in the error detail', () => {
+    try {
+      validateJob({ ...base, guidance: [{ text: '- forged' }] }, cfg);
+      throw new Error('should not reach');
+    } catch (err) {
+      expect((err as Error).message).toMatch(/"- "/);
+    }
   });
 });
