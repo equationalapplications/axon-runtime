@@ -30,6 +30,6 @@ export function buildDispatchJob(input: {
       max_spend_usd: Number(input.maxSpend),
     },
     output: input.output,
-    ...(input.guidance !== undefined ? { guidance: input.guidance } : {}),
+    ...(input.guidance?.length ? { guidance: input.guidance } : {}),
   };
 }

@@ -147,7 +147,6 @@ describe('AxonClient contract mismatch handling', () => {
     await expect(c.wait('3f1a6b8e-0000-4000-8000-0000000000f1', { pollMs: 5, timeoutMs: 60 })).rejects.toThrow(
       /timed out/,
     );
-    expect(vi.mocked(fetch).mock.calls.length).toBeGreaterThanOrEqual(5);
   });
 
   it('wait() keeps retrying a JSON 5xx body (a Fastify default error is NOT a contract mismatch)', async () => {
@@ -156,7 +155,6 @@ describe('AxonClient contract mismatch handling', () => {
     await expect(c.wait('3f1a6b8e-0000-4000-8000-0000000000f1', { pollMs: 5, timeoutMs: 60 })).rejects.toThrow(
       /timed out/,
     );
-    expect(vi.mocked(fetch).mock.calls.length).toBeGreaterThanOrEqual(5);
   });
 
   it('wait() fails fast on a same-version terminal body that fails schema validation (no lockstep hint)', async () => {

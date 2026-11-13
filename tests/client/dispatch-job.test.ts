@@ -36,6 +36,11 @@ describe('buildDispatchJob (the --guidance-file wiring)', () => {
     expect(JobRequestSchema.safeParse(job).success).toBe(true);
   });
 
+  it('never sends guidance: [] — an empty file yields the absent key (D11)', () => {
+    const job = buildDispatchJob({ ...input, goalFile: goalFile(), guidance: [] });
+    expect('guidance' in job).toBe(false);
+  });
+
   it('builds a schema-valid v3 job with goal text read verbatim', () => {
     const job = buildDispatchJob({ ...input, goalFile: goalFile('make the thing') });
     expect(job.goal).toBe('make the thing');
