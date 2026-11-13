@@ -25,6 +25,7 @@ const FileSchema = z
     node_daily_spend_usd: z.number().positive(),
     max_goal_bytes: z.number().int().positive().default(32_768),
     max_context_bytes: z.number().int().positive().default(1_048_576),
+    max_guidance_bytes: z.number().int().positive().default(3072),
     max_inline_patch_bytes: z.number().int().positive().default(1_048_576),
     artifact_ttl_days: z.number().int().positive().default(7),
     /** Operator-owned addendum appended to the built-in worker system prompt. */
@@ -58,6 +59,7 @@ export interface DeployConfig {
   nodeDailySpendUsd: number;
   maxGoalBytes: number;
   maxContextBytes: number;
+  maxGuidanceBytes: number;
   maxInlinePatchBytes: number;
   artifactTtlDays: number;
   extraSystemPrompt?: string;
@@ -89,6 +91,7 @@ export function loadDeployConfig(path: string, env: NodeJS.ProcessEnv): DeployCo
     nodeDailySpendUsd: parsed.node_daily_spend_usd,
     maxGoalBytes: parsed.max_goal_bytes,
     maxContextBytes: parsed.max_context_bytes,
+    maxGuidanceBytes: parsed.max_guidance_bytes,
     maxInlinePatchBytes: parsed.max_inline_patch_bytes,
     artifactTtlDays: parsed.artifact_ttl_days,
     extraSystemPrompt: parsed.extra_system_prompt,

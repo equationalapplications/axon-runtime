@@ -37,8 +37,19 @@ describe('loadDeployConfig', () => {
     expect(cfg.maxInlinePatchBytes).toBe(1_048_576);
     expect(cfg.maxGoalBytes).toBe(32_768);
     expect(cfg.maxContextBytes).toBe(1_048_576);
+    expect(cfg.maxGuidanceBytes).toBe(3072);
     expect(cfg.endpoint.requestTimeoutMs).toBe(600_000);
     expect(cfg.endpoint.maxRetries).toBe(3);
+  });
+
+  it('honors an explicit max_guidance_bytes override', () => {
+    expect(loadDeployConfig(writeConfig({ max_guidance_bytes: 2048 }), env).maxGuidanceBytes).toBe(2048);
+  });
+
+  it('rejects a non-positive or non-integer max_guidance_bytes', () => {
+    expect(() => loadDeployConfig(writeConfig({ max_guidance_bytes: 0 }), env)).toThrow();
+    expect(() => loadDeployConfig(writeConfig({ max_guidance_bytes: -1 }), env)).toThrow();
+    expect(() => loadDeployConfig(writeConfig({ max_guidance_bytes: 1.5 }), env)).toThrow();
   });
 
   it('honors explicit endpoint timeout/retry overrides', () => {
