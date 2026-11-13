@@ -1,6 +1,7 @@
 import { isRepoAllowed } from '../config/allowlist.js';
 import type { DeployConfig } from '../config/deploy.js';
 import { RejectError } from '../contract/errors.js';
+import { validateGuidanceItems } from '../contract/guidance.js';
 import { CONTRACT_VERSION, JobRequestSchema, type JobRequest } from '../contract/schema.js';
 
 function byteLength(s: string): number {
@@ -30,6 +31,18 @@ export function validateJob(body: unknown, cfg: DeployConfig): JobRequest {
   const contextBytes = job.context.reduce((n, f) => n + byteLength(f.content), 0);
   if (contextBytes > cfg.maxContextBytes) {
     throw new RejectError('limit_exceeded', `context exceeds ${cfg.maxContextBytes} bytes`);
+  }
+
+  if (job.guidance !== undefined) {
+    const guidanceError = validateGuidanceItems(job.guidance, cfg.maxGuidanceBytes);
+    if (guidanceError !== null) {
+      // Content rules → malformed_payload (raising the byte cap cannot help);
+      // the size cap alone → limit_exceeded, matching goal/context semantics.
+      throw new RejectError(
+        guidanceError.kind === 'over-cap' ? 'limit_exceeded' : 'malformed_payload',
+        guidanceError.message,
+      );
+    }
   }
 
   return {

@@ -30,7 +30,7 @@ beforeEach(() => {
     repoAllowlist: ['repo'],
     ceilings: { max_harness_steps: 40, timeout_seconds: 1800, max_spend_usd: 2 },
     nodeDailySpendUsd: 20,
-    maxGoalBytes: 1024, maxContextBytes: 1024, maxInlinePatchBytes: 1024, artifactTtlDays: 7,
+    maxGoalBytes: 1024, maxContextBytes: 1024, maxGuidanceBytes: 1024, maxInlinePatchBytes: 1024, artifactTtlDays: 7,
     endpoint: { baseUrl: 'https://x/v1', model: 'm', apiKey: 'k-env' },
   };
   const store = new JobStore(join(home, 'jobs.db'));
@@ -69,6 +69,8 @@ describe('auth', () => {
       node_id: 'n1', contract_version: CONTRACT_VERSION, active_jobs: 0, max_concurrent_jobs: 2,
       runtime_version: '0.1.0',
     });
+    // Pin the LITERAL: a contract bump must touch this test (spec: /nodeinfo version).
+    expect(res.json().contract_version).toBe(3);
   });
 });
 

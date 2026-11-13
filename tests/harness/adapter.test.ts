@@ -180,6 +180,49 @@ describe('HarnessAdapter', () => {
   });
 });
 
+describe('HarnessAdapter guidance rendering (issue #50)', () => {
+  async function capturedUserPrompt(over: Partial<JobRequest> = {}): Promise<string> {
+    let userContent = '';
+    const fetchImpl = vi.fn(async (_url: unknown, init: { body: string }) => {
+      const body = JSON.parse(init.body) as { messages: Array<{ role: string; content: string }> };
+      userContent = body.messages.find((m) => m.role === 'user')!.content;
+      return new Response(JSON.stringify(assistantDone('done')), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }) as unknown as typeof fetch;
+    const adapter = new HarnessAdapter({ endpoint, fetchImpl });
+    await adapter.run(ws(), job(over), new AbortController().signal);
+    return userContent;
+  }
+
+  it('renders guidance verbatim between the goal and the Context files section', async () => {
+    const guidance = [
+      { label: 'tests', text: 'Always run npx vitest.' },
+      { text: 'line one\nline two' },
+    ];
+    const prompt = await capturedUserPrompt({ context: [{ path: 'a.md', content: 'ctx' }], guidance });
+    const goalEnd = prompt.indexOf('write a file\n\n');
+    const guidanceStart = prompt.indexOf('Standing guidance (verbatim, from the dispatcher):');
+    const contextStart = prompt.indexOf('Context files:');
+    expect(guidanceStart).toBeGreaterThan(goalEnd);
+    expect(contextStart).toBeGreaterThan(guidanceStart);
+    expect(prompt).toContain('- [tests] Always run npx vitest.');
+    expect(prompt).toContain('- line one\nline two');
+    expect(prompt).toContain('=== End of standing guidance ===');
+  });
+
+  it('renders no guidance section when guidance is absent', async () => {
+    const prompt = await capturedUserPrompt();
+    expect(prompt).toBe('write a file');
+  });
+
+  it('renders no guidance section when guidance is empty', async () => {
+    const prompt = await capturedUserPrompt({ guidance: [] });
+    expect(prompt).toBe('write a file');
+  });
+});
+
 describe('HarnessAdapter retry + per-request timeout (spec #8)', () => {
   afterEach(() => {
     vi.useRealTimers();

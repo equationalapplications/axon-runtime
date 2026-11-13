@@ -69,8 +69,8 @@ placement are in progress.
 - **No push access.** Work comes back as a diff; the worker never pushes.
 - **Secrets by reference.** Config files name environment variables
   (`bearer_token_env`, `api_key_env`); secrets never live in config.
-- **Bounded input and output.** Goal, context, and inline patch sizes are
-  capped per node.
+- **Bounded input and output.** Goal, context, guidance, and inline patch
+  sizes are capped per node.
 - **Crash recovery.** On startup, jobs left `running` are marked
   `interrupted`, orphaned worktrees are removed, and expired artifacts are
   purged.
@@ -169,7 +169,57 @@ To run an Axon worker on a dedicated Android device via Termux:
 | GET | `/jobs/:id/artifact?id=` | Fetch an artifact such as `patch.diff` |
 
 The contract lives in [`src/contract/schema.ts`](src/contract/schema.ts)
-(`CONTRACT_VERSION = 2`).
+(`CONTRACT_VERSION = 3`).
+
+## Standing guidance (contract v3)
+
+A dispatcher may attach optional **standing guidance** to a job — up to 16
+items of `{ label?, text }` — which the worker injects verbatim into the
+agent prompt between the goal and the context files, fenced by a closing
+delimiter so the model can see where it ends:
+
+```
+Standing guidance (verbatim, from the dispatcher):
+- [tests] Always run npx vitest before finishing.
+- Keep diffs small.
+=== End of standing guidance ===
+```
+
+Rules (enforced by the worker validator and by the client's
+`--guidance-file` pre-flight):
+
+- `label` is optional, non-empty, single-line (no `]` — it would forge the
+  rendered heading's end); `text` is non-empty, not whitespace-only, and may
+  span multiple lines (rendered byte-for-byte).
+- No text line may begin with `- ` (it would forge an item boundary).
+- No text may contain the closing-delimiter line
+  `=== End of standing guidance ===`.
+- Raw label + text bytes must total at most the node's `max_guidance_bytes`
+  (default `3072`); violations are rejected as `limit_exceeded`.
+
+```bash
+axon dispatch --node n1 --repo … --goal-file goal.md --guidance-file guidance.json
+```
+
+### Lockstep upgrade order
+
+`CONTRACT_VERSION` bumps are not backward compatible. Upgrade in order:
+**drain running jobs, then upgrade workers, then upgrade the controller**
+(dispatcher). Before dispatching, check each node's version via
+`GET /nodeinfo` (`contract_version` field) and hold dispatch to any node
+that still runs the older contract. What a mismatch looks like at
+runtime: `dispatch` to an old worker returns a `contract_unsupported`
+rejection (printed, exit 1); `status`/`wait` against an out-of-date
+node's terminal envelope fails fast with a typed `ContractMismatchError`
+naming both versions. Note the drain-first order is the real guard for
+the bump itself — the old client predates the fail-fast error. During a
+lagging-worker window, `contract_unsupported` rejections still leave a
+`dispatched` row in the ledger (the row is written before the rejection
+check) — expected, not a bug. One caveat when retrying a rejected job
+over raw HTTP with the SAME job_id after upgrading a worker: the worker
+already stores a `rejected` row under that id and will answer
+`accepted` without running anything. Mint a fresh job_id for retries
+(the CLI does this automatically on every dispatch).
 
 ## Development
 

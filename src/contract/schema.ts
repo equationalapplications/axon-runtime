@@ -1,6 +1,7 @@
 import { z } from 'zod';
+import { DEFAULT_MAX_GUIDANCE_BYTES, MAX_GUIDANCE_ITEMS } from './guidance.js';
 
-export const CONTRACT_VERSION = 2 as const;
+export const CONTRACT_VERSION = 3 as const;
 
 export const JobStatusSchema = z.enum(['ok', 'error', 'timeout', 'rejected', 'interrupted']);
 
@@ -35,16 +36,41 @@ export const ContextFileSchema = z.object({
   content: z.string(),
 });
 
-export const JobRequestSchema = z.object({
-  contract_version: z.number().int(),
-  job_id: z.string().uuid(),
-  repo: z.string().min(1),
-  ref: z.string().min(1),
-  goal: z.string().min(1),
-  context: z.array(ContextFileSchema).default([]),
-  constraints: ConstraintsSchema,
-  output: z.enum(['patch', 'report']),
-});
+export const GuidanceItemSchema = z
+  .object({
+    /** Optional single-line heading shown as `- [label] text`; `]` would forge the heading's end. */
+    label: z
+      .string()
+      .min(1)
+      .refine(
+        (s) => !s.includes('\n') && !s.includes('\r') && !s.includes(']'),
+        'guidance label must not contain line terminators or "]"',
+      )
+      .optional(),
+    /** Verbatim guidance text; may span multiple lines, must not be blank. */
+    text: z
+      .string()
+      .min(1)
+      .refine((s) => s.trim().length > 0, 'guidance text must not be empty or whitespace-only'),
+  })
+  .strict();
+
+export const JobRequestSchema = z
+  .object({
+    contract_version: z.number().int(),
+    job_id: z.string().uuid(),
+    repo: z.string().min(1),
+    ref: z.string().min(1),
+    goal: z.string().min(1),
+    context: z.array(ContextFileSchema).default([]),
+    /** Optional dispatcher guidance injected verbatim into the worker prompt. */
+    guidance: z.array(GuidanceItemSchema).max(MAX_GUIDANCE_ITEMS).optional(),
+    constraints: ConstraintsSchema,
+    output: z.enum(['patch', 'report']),
+  })
+  .strict();
+
+export type GuidanceItem = z.infer<typeof GuidanceItemSchema>;
 
 export const TelemetrySchema = z.object({
   started_at: z.string().datetime(),

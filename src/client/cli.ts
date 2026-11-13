@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 import { readFileSync, writeFileSync } from 'node:fs';
 import { Command } from 'commander';
-import { AxonClient, newJobId } from './http.js';
+import { AxonClient } from './http.js';
+import { loadGuidanceFile } from './guidance-file.js';
+import { buildDispatchJob } from './dispatch-job.js';
 import { Ledger } from '../controller/ledger.js';
-import { CONTRACT_VERSION, type JobRequest } from '../contract/schema.js';
+import type { JobRequest } from '../contract/schema.js';
 
 interface NodeEntry {
   node_id: string;
@@ -41,24 +43,22 @@ program
   .option('--max-steps <n>', 'harness step cap', '40')
   .option('--timeout <seconds>', 'wall clock cap', '1800')
   .option('--max-spend <usd>', 'per-job spend cap', '2')
+  .option('--guidance-file <path>', 'JSON file of standing guidance items [{ label?, text }]', undefined)
   .option('--wait', 'poll until the job reaches a terminal status', false)
   .action(async (opts) => {
     const globals = program.opts();
+    const guidance = opts.guidanceFile ? loadGuidanceFile(opts.guidanceFile) : undefined;
     const { client } = clientFor(opts.node, globals.nodes);
-    const job: JobRequest = {
-      contract_version: CONTRACT_VERSION,
-      job_id: newJobId(),
+    const job: JobRequest = buildDispatchJob({
       repo: opts.repo,
       ref: opts.ref,
-      goal: readFileSync(opts.goalFile, 'utf8'),
-      context: [],
-      constraints: {
-        max_harness_steps: Number(opts.maxSteps),
-        timeout_seconds: Number(opts.timeout),
-        max_spend_usd: Number(opts.maxSpend),
-      },
+      goalFile: opts.goalFile,
       output: opts.output,
-    };
+      maxSteps: opts.maxSteps,
+      timeout: opts.timeout,
+      maxSpend: opts.maxSpend,
+      guidance,
+    });
     const submitted = await client.dispatch(job);
     const ledger = new Ledger(globals.ledger);
     ledger.recordDispatch(job, opts.node);
