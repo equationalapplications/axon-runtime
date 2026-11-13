@@ -1,8 +1,29 @@
 import { randomUUID } from 'node:crypto';
-import { EnvelopeSchema, type Envelope, type JobRequest } from '../contract/schema.js';
+import { CONTRACT_VERSION, EnvelopeSchema, type Envelope, type JobRequest } from '../contract/schema.js';
 import type { SubmitResult } from '../contract/schema.js';
 
 export type { SubmitResult };
+
+/**
+ * Thrown when a terminal (non-'running') response body fails envelope schema
+ * validation — almost always a contract version skew between node and client.
+ * Carries both versions; wait() rethrows it immediately instead of polling.
+ */
+export class ContractMismatchError extends Error {
+  readonly nodeContractVersion: unknown;
+  readonly clientContractVersion: number;
+
+  constructor(nodeContractVersion: unknown, clientContractVersion: number) {
+    super(
+      `axon: contract mismatch — node contract_version ${String(nodeContractVersion)} ` +
+        `is not supported by client contract_version ${clientContractVersion}; upgrade in lockstep ` +
+        `(drain, then workers, then controller)`,
+    );
+    this.name = 'ContractMismatchError';
+    this.nodeContractVersion = nodeContractVersion;
+    this.clientContractVersion = clientContractVersion;
+  }
+}
 
 export function newJobId(): string {
   return randomUUID();
@@ -51,7 +72,14 @@ export class AxonClient {
     if (res.status === 404) throw new Error(`axon: unknown job ${jobId}`);
     const body = (await res.json()) as unknown;
     if ((body as { status?: string }).status === 'running') return { status: 'running' };
-    return EnvelopeSchema.parse(body);
+    try {
+      return EnvelopeSchema.parse(body);
+    } catch {
+      throw new ContractMismatchError(
+        (body as { contract_version?: unknown } | null)?.contract_version,
+        CONTRACT_VERSION,
+      );
+    }
   }
 
   async wait(jobId: string, opts: { pollMs?: number; timeoutMs?: number } = {}): Promise<Envelope> {
@@ -61,8 +89,9 @@ export class AxonClient {
       try {
         const current = await this.status(jobId);
         if (current.status !== 'running') return current as Envelope;
-      } catch {
-        // transient (job not visible yet / unknown): keep polling until the deadline
+      } catch (err) {
+        if (err instanceof ContractMismatchError) throw err;
+        // transient (job not visible yet / unknown / 5xx HTML body): keep polling until the deadline
       }
       if (Date.now() >= deadline) throw new Error(`axon: timed out waiting for job ${jobId}`);
       await new Promise((r) => setTimeout(r, pollMs));
