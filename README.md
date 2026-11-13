@@ -183,6 +183,10 @@ AXON_LIVE=1 npm test  # also calls a real model endpoint
 Cost figures are estimates from fixed per-token rates in
 `src/harness/adapter.ts`. Treat them as budget guards, not billing.
 
+## Roadmap
+
+Planned work, ordered by gates, is in [docs/ROADMAP.md](docs/ROADMAP.md).
+
 ## License
 
 MIT © Equational Applications LLC
