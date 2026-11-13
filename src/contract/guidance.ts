@@ -6,6 +6,9 @@ export const GUIDANCE_END_LINE = '=== End of standing guidance ===';
 /** Single source of truth for the guidance cap default (deploy.ts schema + CLI warning). */
 export const DEFAULT_MAX_GUIDANCE_BYTES = 3072;
 
+/** Single source of truth for the max guidance item count (job schema + CLI pre-flight). */
+export const MAX_GUIDANCE_ITEMS = 16;
+
 /** Raw UTF-8 bytes of labels + texts (no rendering overhead) — the number the cap is measured against. */
 export function guidanceBytes(items: GuidanceItem[]): number {
   return items.reduce(

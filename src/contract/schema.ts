@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DEFAULT_MAX_GUIDANCE_BYTES, MAX_GUIDANCE_ITEMS } from './guidance.js';
 
 export const CONTRACT_VERSION = 3 as const;
 
@@ -37,11 +38,14 @@ export const ContextFileSchema = z.object({
 
 export const GuidanceItemSchema = z
   .object({
-    /** Optional single-line heading shown as `- [label] text`. */
+    /** Optional single-line heading shown as `- [label] text`; `]` would forge the heading's end. */
     label: z
       .string()
       .min(1)
-      .refine((s) => !s.includes('\n') && !s.includes('\r'), 'guidance label must not contain line terminators')
+      .refine(
+        (s) => !s.includes('\n') && !s.includes('\r') && !s.includes(']'),
+        'guidance label must not contain line terminators or "]"',
+      )
       .optional(),
     /** Verbatim guidance text; may span multiple lines, must not be blank. */
     text: z
@@ -60,7 +64,7 @@ export const JobRequestSchema = z
     goal: z.string().min(1),
     context: z.array(ContextFileSchema).default([]),
     /** Optional dispatcher guidance injected verbatim into the worker prompt. */
-    guidance: z.array(GuidanceItemSchema).max(16).optional(),
+    guidance: z.array(GuidanceItemSchema).max(MAX_GUIDANCE_ITEMS).optional(),
     constraints: ConstraintsSchema,
     output: z.enum(['patch', 'report']),
   })

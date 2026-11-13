@@ -3,8 +3,7 @@ import { z } from 'zod';
 import { DEFAULT_MAX_GUIDANCE_BYTES, guidanceBytes, validateGuidanceItems } from '../contract/guidance.js';
 import { GuidanceItemSchema, type GuidanceItem } from '../contract/schema.js';
 
-/** Same bound the job contract enforces server-side (GuidanceItemSchema array max). */
-export const MAX_GUIDANCE_ITEMS = 16;
+import { MAX_GUIDANCE_ITEMS } from '../contract/guidance.js';
 
 /**
  * Client-side pre-flight for `dispatch --guidance-file`: reads and validates
