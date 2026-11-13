@@ -47,6 +47,8 @@ patch) gains an entry for the guidance cap. The spec also says how a
 dispatcher-attached block relates to the operator-owned `extra_system_prompt`
 rule.
 
+Done — merged 2026-11-13, PR #52.
+
 ## Step 2 — Guidance delivered while the job runs — PLANNED
 
 Guidance arrives as the worker touches new files, not only at dispatch. A
