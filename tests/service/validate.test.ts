@@ -55,6 +55,10 @@ describe('validateJob', () => {
     expect(reasonOf({ ...base, ref: 42 })).toBe('malformed_payload');
   });
 
+  it('rejects unknown top-level fields with malformed_payload (strict schema)', () => {
+    expect(reasonOf({ ...base, guidnce: [{ text: 'typo-provenance-drop' }] })).toBe('malformed_payload');
+  });
+
   it('rejects a repo outside the allowlist', () => {
     expect(reasonOf({ ...base, repo: 'git@github.com:someone/else.git' })).toBe('repo_not_allowlisted');
   });

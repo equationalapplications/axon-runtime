@@ -15,9 +15,11 @@ export class ContractMismatchError extends Error {
 
   constructor(nodeContractVersion: unknown, clientContractVersion: number) {
     super(
-      `axon: contract mismatch — node contract_version ${String(nodeContractVersion)} ` +
-        `is not supported by client contract_version ${clientContractVersion}; upgrade in lockstep ` +
-        `(drain, then workers, then controller)`,
+      `axon: node terminal envelope failed validation ` +
+        `(node contract_version ${String(nodeContractVersion)}, client contract_version ${clientContractVersion})` +
+        (nodeContractVersion !== clientContractVersion
+          ? '; if the node is running an older contract, upgrade in lockstep (drain, then workers, then controller)'
+          : ''),
     );
     this.name = 'ContractMismatchError';
     this.nodeContractVersion = nodeContractVersion;

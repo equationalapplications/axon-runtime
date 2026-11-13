@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { z } from 'zod';
 import { ConstraintsSchema, type Constraints } from '../contract/schema.js';
+import { DEFAULT_MAX_GUIDANCE_BYTES } from '../contract/guidance.js';
 import { allowlistEntryError } from './allowlist.js';
 
 /** Single source of truth for retry defaults (the adapter imports these). */
@@ -25,7 +26,7 @@ const FileSchema = z
     node_daily_spend_usd: z.number().positive(),
     max_goal_bytes: z.number().int().positive().default(32_768),
     max_context_bytes: z.number().int().positive().default(1_048_576),
-    max_guidance_bytes: z.number().int().positive().default(3072),
+    max_guidance_bytes: z.number().int().positive().default(DEFAULT_MAX_GUIDANCE_BYTES),
     max_inline_patch_bytes: z.number().int().positive().default(1_048_576),
     artifact_ttl_days: z.number().int().positive().default(7),
     /** Operator-owned addendum appended to the built-in worker system prompt. */

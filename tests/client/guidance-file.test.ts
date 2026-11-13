@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { loadGuidanceFile } from '../../src/client/guidance-file.js';
+import { JobRequestSchema, CONTRACT_VERSION } from '../../src/contract/schema.js';
 
 function fileWith(content: unknown): string {
   const dir = mkdtempSync(join(tmpdir(), 'axon-gui-'));
@@ -61,5 +62,22 @@ describe('loadGuidanceFile (dispatch --guidance-file pre-flight)', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     loadGuidanceFile(fileWith([{ text: 'x'.repeat(3072) }]));
     expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('output wires into the job contract — guidance passes JobRequestSchema (dispatch wiring pin)', () => {
+    const items = loadGuidanceFile(fileWith([{ label: 'ADR-7', text: 'use the envelope helper' }]));
+    const parsed = JobRequestSchema.safeParse({
+      contract_version: CONTRACT_VERSION,
+      job_id: '3f1a6b8e-0000-4000-8000-0000000000e1',
+      repo: 'git@github.com:example/project.git',
+      ref: 'main',
+      goal: 'ship it',
+      context: [],
+      guidance: items,
+      constraints: { max_harness_steps: 40, timeout_seconds: 1800, max_spend_usd: 2 },
+      output: 'patch',
+    });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.guidance).toEqual(items);
   });
 });

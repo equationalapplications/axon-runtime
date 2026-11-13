@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { z } from 'zod';
-import { guidanceBytes, validateGuidanceItems } from '../contract/guidance.js';
+import { DEFAULT_MAX_GUIDANCE_BYTES, guidanceBytes, validateGuidanceItems } from '../contract/guidance.js';
 import { GuidanceItemSchema, type GuidanceItem } from '../contract/schema.js';
 
 /**
@@ -32,8 +32,8 @@ export function loadGuidanceFile(path: string): GuidanceItem[] {
   const ruleError = validateGuidanceItems(parsed.data, Number.POSITIVE_INFINITY);
   if (ruleError !== null) throw new Error(`axon: --guidance-file ${path}: ${ruleError}`);
   const bytes = guidanceBytes(parsed.data);
-  if (bytes > 3072) {
-    console.warn(`axon: warning: guidance in ${path} is ${bytes} bytes, over the 3072-byte default cap; ` +
+  if (bytes > DEFAULT_MAX_GUIDANCE_BYTES) {
+    console.warn(`axon: warning: guidance in ${path} is ${bytes} bytes, over the ${DEFAULT_MAX_GUIDANCE_BYTES}-byte default cap; ` +
       'submit will be rejected unless the node raised max_guidance_bytes');
   }
   return parsed.data;

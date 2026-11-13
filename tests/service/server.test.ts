@@ -69,6 +69,8 @@ describe('auth', () => {
       node_id: 'n1', contract_version: CONTRACT_VERSION, active_jobs: 0, max_concurrent_jobs: 2,
       runtime_version: '0.1.0',
     });
+    // Pin the LITERAL: a contract bump must touch this test (spec: /nodeinfo version).
+    expect(res.json().contract_version).toBe(3);
   });
 });
 
