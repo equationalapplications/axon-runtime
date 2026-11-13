@@ -2,6 +2,7 @@ import { execa } from 'execa';
 import { childEnv } from './child-env.js';
 import { DEFAULT_MAX_RETRIES, DEFAULT_REQUEST_TIMEOUT_MS, type DeployConfig } from '../config/deploy.js';
 import type { ExitReason, JobRequest } from '../contract/schema.js';
+import { renderGuidance } from '../contract/guidance.js';
 import type { Workspace } from '../executor/types.js';
 
 export const HARNESS_VERSION = 'deepseek-harness-0.1';
@@ -272,7 +273,11 @@ export class HarnessAdapter {
     const context = job.context
       .map((f) => `--- ${f.path} ---\n${f.content}`)
       .join('\n\n');
-    return context ? `${job.goal}\n\nContext files:\n${context}` : job.goal;
+    let prompt = job.goal;
+    const guidance = renderGuidance(job.guidance);
+    if (guidance) prompt += `\n\n${guidance}`;
+    if (context) prompt += `\n\nContext files:\n${context}`;
+    return prompt;
   }
 
   /**
