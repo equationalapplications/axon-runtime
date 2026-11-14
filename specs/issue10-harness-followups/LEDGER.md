@@ -1,6 +1,6 @@
 # LEDGER — issue #10 harness follow-ups
 
-**What's in flight:** nothing — plan written, implementation not started. Branch `fix/issue10-harness-followups`, PR #57 (draft).
+**What's in flight:** implementation complete (`98fbc45`), independent review PASS (2026-11-14, 0 blockers, 2 NITs — stale header fixed here, export surface judged spec-conformant). Cleanup in progress. Branch `fix/issue10-harness-followups`, PR #57.
 
 ## Task 1: Injectable `baseBackoffMs` option
 
@@ -19,7 +19,7 @@
 ## Task 3: Verify, review, cleanup
 
 - [x] Full suite + build green, timing re-check (Step 1) — evidence: `npx vitest run` → 23 files / **259 passed (259)**, exit 0; `npm run build` (tsc) exit 0
-- [ ] Independent reviewer subagent over full branch diff — verdict + evidence:
-- [ ] Implementation commit (`feat(harness):`) pushed — SHA:
+- [x] Independent reviewer subagent over full branch diff — verdict + evidence: **PASS** (2026-11-14, independent leaf, 46s): all five spec points verified, production wiring confirmed inert, real re-runs 23 files/259 passed exit 0 + build exit 0 + timeout describe 1.55s; transcript deleg_8e5f65d1/task-0.log
+- [x] Implementation commit (`feat(harness):`) pushed — SHA: `98fbc45`
 - [ ] Cleanup commit: spec → `Implemented`, plan + ledger deleted, `gh pr ready` — SHA:
 - [ ] Bot reviews evaluated, CI green, merge ask posted
