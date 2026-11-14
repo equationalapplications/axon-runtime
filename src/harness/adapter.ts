@@ -52,7 +52,8 @@ interface ChatCompletionBody {
 /** "All 5xx" per spec, plus the explicit transient 4xx trio. */
 export const isRetryableStatus = (status: number): boolean =>
   (status >= 500 && status <= 599) || status === 408 || status === 429 || status === 499;
-const BASE_BACKOFF_MS = 2_000;
+/** Test-facing injection point: the exponential backoff base (2/4/8s schedule). */
+export const BASE_BACKOFF_MS = 2_000;
 const MAX_RETRY_AFTER_MS = 60_000;
 
 /** Parse a Retry-After header (seconds or HTTP-date); null when absent/unparseable/past/negative. */
@@ -83,6 +84,7 @@ export class HarnessAdapter {
   private readonly onStep?: (step: number, costUsd: number) => void;
   private readonly requestTimeoutMs: number;
   private readonly maxRetries: number;
+  private readonly baseBackoffMs: number;
   private readonly systemContent: string;
 
   constructor(opts: {
@@ -90,12 +92,15 @@ export class HarnessAdapter {
     extraSystemPrompt?: string;
     fetchImpl?: typeof fetch;
     onStep?: (step: number, costUsd: number) => void;
+    /** Test-facing: shrinks the exponential backoff schedule so real-timer tests stay fast. */
+    baseBackoffMs?: number;
   }) {
     this.endpoint = opts.endpoint;
     this.fetchImpl = opts.fetchImpl ?? fetch;
     this.onStep = opts.onStep;
     this.requestTimeoutMs = opts.endpoint.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
     this.maxRetries = opts.endpoint.maxRetries ?? DEFAULT_MAX_RETRIES;
+    this.baseBackoffMs = opts.baseBackoffMs ?? BASE_BACKOFF_MS;
     // Built once per adapter; the composed system message still rides in
     // every request body like the rest of `messages` (code hygiene, not a
     // token saving — see the system-prompt extension spec §Design).
@@ -305,7 +310,7 @@ export class HarnessAdapter {
   private async backoffSleep(attempts: number, signal: AbortSignal, retryAfter?: string | null): Promise<void> {
     if (signal.aborted) return; // pre-aborted: never sleep
     const jitter = 1 + (Math.random() * 0.4 - 0.2); // ±20%
-    const exponential = BASE_BACKOFF_MS * 2 ** attempts * jitter;
+    const exponential = this.baseBackoffMs * 2 ** attempts * jitter;
     const parsed = parseRetryAfter(retryAfter, Date.now());
     const ms = parsed !== null ? Math.min(parsed, MAX_RETRY_AFTER_MS) : Math.max(1, exponential);
     await new Promise<void>((resolve) => {

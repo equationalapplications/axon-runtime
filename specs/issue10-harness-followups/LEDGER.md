@@ -4,21 +4,21 @@
 
 ## Task 1: Injectable `baseBackoffMs` option
 
-- [ ] Export `BASE_BACKOFF_MS`, add ctor opt, use in `backoffSleep` (plan Task 1, Steps 1-3)
-- [ ] Convert the two per-request-timeout tests to `baseBackoffMs: 10` (Step 4)
-- [ ] Timing + suite verification (Step 5) — evidence:
+- [x] Export `BASE_BACKOFF_MS`, add ctor opt, use in `backoffSleep` (plan Task 1, Steps 1-3) — `src/harness/adapter.ts` (7 insertions on the feature diff)
+- [x] Convert the two per-request-timeout tests to `baseBackoffMs: 10` (Step 4) — both constructor calls updated, assertions untouched
+- [x] Timing + suite verification (Step 5) — evidence: adapter test file 25s-class → **1.66s** (`time npx vitest run tests/harness/adapter.test.ts`, 35/35 passed); timeout describe block 1.48s total; real 2026-11-14 runs in session log
 
 ## Task 2: Pin the step-count contract
 
-- [ ] Pinning test A — first-step exhaustion → `endpoint_error`, steps 0, no `onStep` (Step 1)
-- [ ] Pinning test B — cancel after one completed step → `cancelled`, steps 1 (Step 2)
-- [ ] RED check A — mutation: count every attempt → test A FAILs, restore → PASS (Step 3) — evidence:
-- [ ] RED check B — mutation: report steps only on `completed` → test B FAILs, restore → PASS (Step 4) — evidence:
-- [ ] Design-doc Step-semantics bullet records the decided contract (Step 5)
+- [x] Pinning test A — first-step exhaustion → `endpoint_error`, steps 0, no `onStep` (Step 1) — `tests/harness/adapter.test.ts` `pin #10 contract: retries exhausted on the FIRST step…`
+- [x] Pinning test B — cancel after one completed step → `cancelled`, steps 1 (Step 2) — `pin #10 contract: cancel after one completed step…`
+- [x] RED check A — mutation: `steps: exitReason === 'completed' ? steps : steps + 1` (Option-B-style) → **BOTH pin tests FAIL** (2 failed | 33 skipped); restored → PASS. Stronger than planned: test B also catches the count-on-failure deviation (Step 3) — evidence: vitest run 2026-11-14 14:31Z
+- [x] RED check B — mutation: `steps: exitReason === 'completed' ? steps : 0` (completed-only) → test B FAILs (1 failed | 1 passed), test A passes; restored → PASS (Step 4) — evidence: vitest run 2026-11-14 14:32Z
+- [x] Design-doc Step-semantics bullet records the decided contract (Step 5) — `docs/superpowers/specs/2026-09-26-harness-retry-timeout-design.md` bullet rewritten with DECIDED marker + rejected alternative
 
 ## Task 3: Verify, review, cleanup
 
-- [ ] Full suite + build green, timing re-check (Step 1) — evidence:
+- [x] Full suite + build green, timing re-check (Step 1) — evidence: `npx vitest run` → 23 files / **259 passed (259)**, exit 0; `npm run build` (tsc) exit 0
 - [ ] Independent reviewer subagent over full branch diff — verdict + evidence:
 - [ ] Implementation commit (`feat(harness):`) pushed — SHA:
 - [ ] Cleanup commit: spec → `Implemented`, plan + ledger deleted, `gh pr ready` — SHA:
