@@ -1,7 +1,7 @@
 # Spec — harness follow-ups: failed-job step-count contract, injectable test backoff
 
 **Date:** 2026-11-14
-**Status:** Draft — spec approval pending
+**Status:** Reviewed — Kurt approved both gate decisions 2026-11-14 ("1, 1" — Option A contract; baseBackoffMs; "clear to proceed with the plan and implementation")
 **Branch:** `fix/issue10-harness-followups`
 **Issue:** equationalapplications/axon-runtime#10
 **INTENT alignment:** the repo has no INTENT.md or AGENTS.md; this check is vacuous for this lane.
