@@ -17,3 +17,17 @@ updates:
       # Revisit when commit-analyzer/release-notes-generator support writer@9.
       - dependency-name: "conventional-changelog-conventionalcommits"
         versions: [">=10"]
+# ── Security decision register (investigated alerts NOT auto-fixed) ─────────
+# Key: <package>|<alert-number>. status ∈ deferred | wontfix | fixed-awaiting-scan
+# Entries:
+# - minimatch|67: deferred — GHSA-g3hv-75wg-m249. The vulnerable copy
+#   (10.2.5) is BUNDLED inside npm 11.x (require chain: @semantic-release/npm
+#   ^11.6.2 -> npm 11.20.0 -> node_modules/npm/node_modules/minimatch).
+#   npm overrides never reach bundled (inBundle) copies — verified live
+#   2026-11-14 (scoped override installed, lockfile unchanged). No npm
+#   release through 12.2.2 bundles minimatch >= 11.0.1 (tarballs extracted
+#   and checked). Dev-scope only: prod `npm audit --omit=dev` = 0; reach is
+#   build-machine glob expansion, never shipped to users.
+#   Retry when npm bundles minimatch >= 11.0.1. NOTE: the 2026-11-18 parent
+#   bump to npm >= 11.21.2 (undici alerts #62/#60/#54/#58) does NOT close
+#   this alert.
