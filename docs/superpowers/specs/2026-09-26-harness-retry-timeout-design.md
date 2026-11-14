@@ -132,9 +132,12 @@ loop:
   `endpoint_error` + status logged; retrying auth/config errors is waste.
 - **Step semantics:** `steps += 1` and `onStep` fire only on a step that
   PRODUCES an assistant message. Retried attempts inside a step do not
-  increment `steps` and do not call `onStep`. (Failed-job step counts:
-  a job that never produces an assistant message reports `steps` as the
-  count of steps that produced one — follow-up contract question in #10.)
+  increment `steps` and do not call `onStep`. (DECIDED in #10,
+  2026-11-14 — Kurt, "1": `steps` counts assistant messages on EVERY
+  exit. A failed or cancelled job reports the count it reached, 0 when
+  it produced none. Rejected: counting a step on final failure — it
+  would move the ledger comparison baseline for no new signal. Pinned
+  by the `pin #10 contract` tests in `tests/harness/adapter.test.ts`.)
 - **Telemetry:** failed attempts log to the worker log via `console.warn`
   (the worker captures stdout/stderr into its log; no new logger plumbing
   in this PR) — `attempt 2/4 failed: http_error status=502 elapsed_ms=4821`

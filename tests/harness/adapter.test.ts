@@ -110,6 +110,20 @@ describe('HarnessAdapter', () => {
     expect(outcome.exitReason).toBe('cancelled');
   });
 
+  it('pin #10 contract: cancel after one completed step → cancelled with steps 1', async () => {
+    // Pins the partial-count side of the #10 decision (Kurt 2026-11-14, "1"):
+    // a cancelled job reports the count it reached — 1 here, not 0.
+    const ac = new AbortController();
+    const adapter = new HarnessAdapter({
+      endpoint,
+      fetchImpl: stubFetch([assistantToolCall('true')]),
+      onStep: () => ac.abort(),
+    });
+    const outcome = await adapter.run(ws(), job(), ac.signal);
+    expect(outcome.exitReason).toBe('cancelled');
+    expect(outcome.steps).toBe(1);
+  });
+
   it('reports per-step cost through onStep so the pool can enforce the job cap', async () => {
     const seen: number[] = [];
     const adapter = new HarnessAdapter({
@@ -353,6 +367,19 @@ describe('HarnessAdapter retry + per-request timeout (spec #8)', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(4); // 1 + 3 retries (default maxRetries)
   });
 
+  it('pin #10 contract: retries exhausted on the FIRST step → endpoint_error with steps 0, onStep never called', async () => {
+    // Pins the #10 decision (Kurt 2026-11-14, "1"): `steps` counts assistant
+    // messages on every exit — a job that never produces one reports 0.
+    const onStep = vi.fn();
+    const fetchImpl = stubResponses([{ status: 500 }]);
+    const adapter = new HarnessAdapter({ endpoint, fetchImpl, onStep, baseBackoffMs: 10 });
+    const outcome = await adapter.run(ws(), job(), new AbortController().signal);
+    expect(outcome.exitReason).toBe('endpoint_error');
+    expect(outcome.steps).toBe(0);
+    expect(onStep).not.toHaveBeenCalled();
+    expect(fetchImpl).toHaveBeenCalledTimes(4); // 1 + 3 retries (default maxRetries)
+  });
+
   it('fails fast on 401: exactly 1 fetch call, endpoint_error, no retries', async () => {
     vi.useFakeTimers();
     const fetchImpl = stubResponses([{ status: 401 }]);
@@ -429,7 +456,7 @@ describe('HarnessAdapter retry + per-request timeout (spec #8)', () => {
 
     it('fetchImpl rejects with a TimeoutError when its passed signal aborts; adapter retries then succeeds', async () => {
       const fetchImpl = makeTimedOutFetch((n) => n <= 2);
-      const adapter = new HarnessAdapter({ endpoint: { ...endpoint, requestTimeoutMs }, fetchImpl });
+      const adapter = new HarnessAdapter({ endpoint: { ...endpoint, requestTimeoutMs }, fetchImpl, baseBackoffMs: 10 });
       const outcome = await adapter.run(ws(), job(), new AbortController().signal);
       expect(outcome.exitReason).toBe('completed');
       expect(fetchImpl).toHaveBeenCalledTimes(3); // two timeouts, then success
@@ -437,7 +464,7 @@ describe('HarnessAdapter retry + per-request timeout (spec #8)', () => {
 
     it('a permanently-hanging endpoint (every attempt times out) ends endpoint_error, not timeout', async () => {
       const fetchImpl = makeTimedOutFetch(() => true);
-      const adapter = new HarnessAdapter({ endpoint: { ...endpoint, requestTimeoutMs }, fetchImpl });
+      const adapter = new HarnessAdapter({ endpoint: { ...endpoint, requestTimeoutMs }, fetchImpl, baseBackoffMs: 10 });
       const outcome = await adapter.run(ws(), job(), new AbortController().signal);
       expect(outcome.exitReason).toBe('endpoint_error'); // classified, never surfaced as 'timeout'
       expect(fetchImpl).toHaveBeenCalledTimes(4); // 1 + 3 retries (default maxRetries)
