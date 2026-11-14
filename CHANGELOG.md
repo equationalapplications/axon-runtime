@@ -1,3 +1,9 @@
+## [1.5.0](https://github.com/equationalapplications/axon-runtime/compare/v1.4.0...v1.5.0) (2026-11-14)
+
+### Features
+
+* **harness:** pin failed-job step-count contract; injectable test backoff ([98fbc45](https://github.com/equationalapplications/axon-runtime/commit/98fbc456c01f0714d9177ed9e757ef1bfeba7681)), closes [#10](https://github.com/equationalapplications/axon-runtime/issues/10) [#10](https://github.com/equationalapplications/axon-runtime/issues/10)
+
 ## [1.4.0](https://github.com/equationalapplications/axon-runtime/compare/v1.3.2...v1.4.0) (2026-11-13)
 
 ### Features
